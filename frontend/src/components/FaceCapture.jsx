@@ -62,7 +62,7 @@ const FaceCapture = () => {
         
         if (!response.ok) throw new Error('Nhận diện thất bại');
         
-        // Dữ liệu thực tế từ Backend (VD: { tenNhanVien: "Đạt", thoiGian: "08:00", caLam: "Ca Sáng", trangThai: "Vào ca thành công" })
+        // Dữ liệu thực tế từ Backend
         const backendData = await response.json(); 
         
         setSuccessData({
@@ -73,7 +73,7 @@ const FaceCapture = () => {
         });
         */
 
-        // --- 2. TẠM THỜI DÙNG DỮ LIỆU ĐỘNG GIẢ LẬP ĐỂ TEST TRONG SÁNG NAY ---
+        // --- 2. TẠM THỜI DÙNG DỮ LIỆU ĐỘNG GIẢ LẬP ĐỂ TEST ---
         const fakeBackendResponse = await new Promise(resolve => setTimeout(() => resolve({
           tenNhanVien: "Đang chờ API API...", 
           thoiGian: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
@@ -99,8 +99,19 @@ const FaceCapture = () => {
   };
 
   return (
-    <div className="flex justify-center items-center p-4 w-full">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden w-full max-w-xl pb-8">
+    <div className="flex flex-col justify-center items-center p-4 w-full min-h-screen bg-gray-50">
+      
+      {/* KHỐI TIÊU ĐỀ HỆ THỐNG (Được dời từ App.jsx sang đây) */}
+      <div className="text-center mb-10 animate-fade-in">
+        <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight uppercase mb-3">
+          Hệ thống chấm công AI
+        </h1>
+        <p className="text-slate-500 max-w-lg mx-auto text-sm md:text-base px-4">
+          Xác thực danh tính bằng công nghệ nhận diện khuôn mặt để đảm bảo tính minh bạch.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden w-full max-w-xl pb-8 animate-fade-in">
         
         <div className="flex items-center justify-center gap-2 p-6 pb-2">
           <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8V6a2 2 0 012-2h3m10 0h3a2 2 0 012 2v2M3 16v2a2 2 0 002 2h3m10 0h3a2 2 0 002-2v-2M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"></path></svg>
@@ -108,10 +119,10 @@ const FaceCapture = () => {
         </div>
 
         {screenState === 'SCANNING' && (
-          <div className="px-8 flex flex-col items-center mt-4 animate-fade-in">
-            {error && <div className="text-red-500 mb-2">{error}</div>}
+          <div className="px-8 flex flex-col items-center mt-4">
+            {error && <div className="text-red-500 mb-2 font-medium">{error}</div>}
             
-            <div className="relative w-full aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden mb-6">
+            <div className="relative w-full aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden mb-6 shadow-inner">
               <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-48 h-48 border-2 border-white/70 relative">
@@ -128,43 +139,41 @@ const FaceCapture = () => {
             <button 
               onClick={capturePhoto} 
               disabled={isLoading}
-              className="bg-blue-50 text-blue-700 font-semibold py-3 px-8 rounded-full flex items-center gap-2 hover:bg-blue-100 transition-colors"
+              className="bg-blue-50 text-blue-700 font-bold py-3.5 px-8 rounded-full flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm active:scale-95"
             >
-              {isLoading ? 'Đang phân tích...' : (
+              {isLoading ? 'Đang phân tích dữ liệu...' : (
                 <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
-                Vui lòng nhìn vào camera</>
+                Vui lòng nhìn thẳng vào camera</>
               )}
             </button>
-            <p className="text-green-600 text-sm mt-3 flex items-center gap-1">
-               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Camera đang bật
+            <p className="text-emerald-600 text-sm mt-4 flex items-center gap-1.5 font-medium">
+               <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Camera đang bật
             </p>
           </div>
         )}
 
         {screenState === 'SUCCESS' && successData && (
           <div className="px-8 flex flex-col items-center justify-center py-10 animate-fade-in">
-            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg">
+            <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-200">
               <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7"></path></svg>
             </div>
             
-            {/* Tên và thông báo được truyền động từ API */}
             <h3 className="text-2xl font-bold text-gray-800 mb-4">{successData.name}</h3>
-            <div className="bg-green-100 text-green-700 font-semibold px-12 py-3 rounded-md text-lg mb-6 w-full text-center">
+            <div className="bg-emerald-50 text-emerald-700 font-bold px-12 py-3 rounded-xl border border-emerald-100 text-lg mb-6 w-full text-center">
               {successData.message}
             </div>
             
-            {/* Giờ và ca làm được truyền động từ API */}
-            <div className="bg-gray-50 w-full py-6 rounded-xl border border-gray-100 flex flex-col items-center mb-6">
-              <div className="flex items-center gap-2 text-xl font-bold text-gray-800 mb-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div className="bg-gray-50 w-full py-6 rounded-2xl border border-gray-100 flex flex-col items-center mb-6">
+              <div className="flex items-center gap-2 text-2xl font-black text-gray-800 mb-1">
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 {successData.time}
               </div>
-              <p className="text-gray-500 text-sm">Ca hôm nay: {successData.shift}</p>
+              <p className="text-gray-500 text-sm font-medium">Ca hôm nay: {successData.shift}</p>
             </div>
 
             <button 
               onClick={() => setScreenState('SCANNING')}
-              className="text-gray-400 hover:text-gray-600 flex items-center gap-2 text-sm"
+              className="text-gray-400 hover:text-gray-600 flex items-center gap-2 text-sm font-medium transition-colors"
             >
               <svg className="w-4 h-4 animate-spin-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               Tự trở về màn hình quét ({countdown}s)

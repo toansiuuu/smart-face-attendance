@@ -1,29 +1,31 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import FaceCapture from './components/FaceCapture';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Import các màn hình bạn đã tạo
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import EmployeeDashboard from './components/EmployeeDashboard'; // Trang nhân viên mới tạo
+import Dashboard from './components/Dashboard'; // Màn hình Admin
+import EmployeeDashboard from './components/EmployeeDashboard'; // Màn hình Nhân viên
+
+// Giả sử bạn có file trang chủ/quét khuôn mặt tên là Home.jsx
+// import Home from './components/Home'; 
 
 function App() {
   return (
-    <BrowserRouter>
-      <div className="w-full min-h-screen bg-gray-50">
-        <Routes>
-          {/* Mặc định vào thẳng Camera chấm công */}
-          <Route path="/" element={<FaceCapture />} />
-          
-          {/* Form đăng nhập */}
-          <Route path="/login" element={<Login />} />
-          
-          {/* Dashboard của Quản lý */}
-          <Route path="/admin" element={<Dashboard />} />
-          
-          {/* Trang lịch sử cá nhân của Nhân viên */}
-          <Route path="/employee" element={<EmployeeDashboard />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+    <Router>
+      <Routes>
+        {/* Route mặc định: Màn hình quét khuôn mặt */}
+        {/* <Route path="/" element={<Home />} /> */}
+
+        {/* ĐƯỜNG DẪN ĐĂNG NHẬP PHẢI TRỎ ĐÚNG VÀO COMPONENT <Login /> */}
+        <Route path="/login" element={<Login />} />
+        
+        {/* Đường dẫn dành cho Quản lý */}
+        <Route path="/admin" element={<Dashboard />} />
+        
+        {/* Đường dẫn dành cho Nhân viên */}
+        <Route path="/employee" element={<EmployeeDashboard />} />
+      </Routes>
+    </Router>
   );
 }
 

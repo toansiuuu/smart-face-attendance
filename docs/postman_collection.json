@@ -1,0 +1,257 @@
+{
+  "info": {
+    "name": "Smart Face Attendance — existing schema",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Run Get CSRF, Login, Get CSRF, then authenticated requests. Fill variables; cookie jar must stay enabled. Mutation requests write to your connected database."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081/api",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "csrfHeader",
+      "value": "X-CSRF-TOKEN",
+      "type": "string"
+    },
+    {
+      "key": "csrfToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeeCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeeName",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeePassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "from",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "to",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "requestId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get CSRF",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/auth/csrf"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const x=pm.response.json();",
+              "pm.collectionVariables.set(\"csrfHeader\",x.headerName);",
+              "pm.collectionVariables.set(\"csrfToken\",x.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "{{csrfHeader}}",
+            "value": "{{csrfToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Me",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "Employees",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/employees?page=0&size=100"
+      }
+    },
+    {
+      "name": "Create employee (writes data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "{{csrfHeader}}",
+            "value": "{{csrfToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/employees",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"employeeCode\": \"{{employeeCode}}\",\n  \"fullName\": \"{{employeeName}}\",\n  \"password\": \"{{employeePassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Schedule versions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/shifts"
+      }
+    },
+    {
+      "name": "Attendance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/attendance?from={{from}}&to={{to}}"
+      }
+    },
+    {
+      "name": "Corrections",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/corrections"
+      }
+    },
+    {
+      "name": "Employee: request correction (writes data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "{{csrfHeader}}",
+            "value": "{{csrfToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/corrections",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"workDate\": \"{{from}}\",\n  \"eventType\": \"MORNING_IN\",\n  \"requestedTime\": \"08:00\",\n  \"reason\": \"Describe the actual correction here\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Manager: approve correction (writes data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "{{csrfHeader}}",
+            "value": "{{csrfToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/corrections/{{requestId}}/review",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"approve\": true,\n  \"note\": \"Verified by manager\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "{{csrfHeader}}",
+            "value": "{{csrfToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/logout",
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

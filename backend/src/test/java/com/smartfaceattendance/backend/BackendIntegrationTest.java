@@ -87,7 +87,7 @@ class BackendIntegrationTest {
 
   Long employee(String code) {
     return employeeService
-        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123"))
+        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123", null))
         .id();
   }
 
@@ -156,7 +156,7 @@ class BackendIntegrationTest {
   void inactiveEmployeeSessionCannotAccess() throws Exception {
     Long id = employee("ONE");
     var session = login("ONE");
-    employeeService.update(id, new EmployeeUpdate("Test Employee", "INACTIVE"));
+    employeeService.update(id, new EmployeeUpdate("Test Employee", "INACTIVE", null));
     mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
   }
 

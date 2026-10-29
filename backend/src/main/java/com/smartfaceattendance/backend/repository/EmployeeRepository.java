@@ -13,4 +13,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
   Optional<Employee> lockById(@Param("id") Long id);
 
   boolean existsByEmployeeCode(String code);
+
+  long countByDepartmentId(Long departmentId);
+
+  List<Employee> findByDepartmentId(Long departmentId);
 }

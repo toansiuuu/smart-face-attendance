@@ -5,4 +5,5 @@ import java.time.*;
 
 public record EmployeeUpdate(
     @NotBlank @Size(max = 150) String fullName,
-    @NotBlank @Pattern(regexp = "ACTIVE|INACTIVE") String status) {}
+    @NotBlank @Pattern(regexp = "ACTIVE|INACTIVE") String status,
+    Long departmentId) {}

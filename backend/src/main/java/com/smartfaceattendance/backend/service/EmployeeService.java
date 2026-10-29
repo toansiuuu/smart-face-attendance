@@ -17,13 +17,19 @@ public class EmployeeService {
   private final EmployeeRepository employees;
   private final AccountRepository accounts;
   private final FaceEnrollmentRepository faces;
+  private final DepartmentRepository departments;
   private final PasswordEncoder encoder;
 
   public EmployeeService(
-      EmployeeRepository e, AccountRepository a, FaceEnrollmentRepository f, PasswordEncoder p) {
+      EmployeeRepository e,
+      AccountRepository a,
+      FaceEnrollmentRepository f,
+      DepartmentRepository d,
+      PasswordEncoder p) {
     employees = e;
     accounts = a;
     faces = f;
+    departments = d;
     encoder = p;
   }
 
@@ -41,12 +47,20 @@ public class EmployeeService {
   }
 
   public EmployeeResponse response(Employee e) {
+    String deptName = null;
+    String deptId = null;
+    if (e.departmentId != null) {
+      var dept = departments.findById(e.departmentId);
+      deptName = dept.map(d -> d.name).orElse(null);
+      deptId = e.departmentId.toString();
+    }
     return new EmployeeResponse(
         e.id,
         e.employeeCode,
         e.fullName,
         initials(e.fullName),
-        null,
+        deptName,
+        deptId,
         null,
         faces.findByEmployeeId(e.id).map(f -> f.active).orElse(false),
         "ACTIVE".equals(e.status) ? "Đang làm việc" : "Đã nghỉ việc");
@@ -66,9 +80,15 @@ public class EmployeeService {
     if (employees.existsByEmployeeCode(code) || accounts.findByUsername(code).isPresent())
       throw new ApiException(409, "Employee code or username already exists");
     var now = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+    if (r.departmentId() != null) {
+      departments
+          .findById(r.departmentId())
+          .orElseThrow(() -> new ApiException(404, "Department not found"));
+    }
     var e = new Employee();
     e.employeeCode = code;
     e.fullName = r.fullName().trim();
+    e.departmentId = r.departmentId();
     e.status = "ACTIVE";
     e.createdAt = now;
     employees.saveAndFlush(e);
@@ -88,6 +108,12 @@ public class EmployeeService {
     var e = employees.lockById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
     e.fullName = r.fullName().trim();
     e.status = r.status();
+    if (r.departmentId() != null) {
+      departments
+          .findById(r.departmentId())
+          .orElseThrow(() -> new ApiException(404, "Department not found"));
+    }
+    e.departmentId = r.departmentId();
     employees.save(e);
     accounts
         .findByEmployeeId(id)

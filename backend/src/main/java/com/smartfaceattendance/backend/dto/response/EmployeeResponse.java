@@ -6,6 +6,7 @@ public record EmployeeResponse(
     String name,
     String avatar,
     String dept,
+    String deptId,
     String phone,
     boolean hasFaceData,
     String workStatus) {}

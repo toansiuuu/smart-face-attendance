@@ -1,6 +1,8 @@
 import SchedulePanel from './SchedulePanel';
 import PasswordDialog from './PasswordDialog';
 import FaceEnrollmentDialog from './FaceEnrollmentDialog';
+import DepartmentPanel from './DepartmentPanel';
+import Modal from './Modal';
 import {api,allPages,localDay,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,logout} from '../api';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -61,6 +63,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
   // ================= DỮ LIỆU TỪ API =================
   const [employees,setEmployees]=useState([]);
+  const [deptList,setDeptList]=useState([]);
 
   const [records,setRecords]=useState([]);
 
@@ -69,14 +72,14 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
   // ================= BỘ LỌC DỮ LIỆU =================
   useEffect(()=>{let active=true;
     const range=monthRange(selectedMonth);
-    Promise.resolve().then(()=>{if(active){setIsLoading(true);setApiError('');}return Promise.all([api('/auth/me'),api('/policy'),allPages('/corrections'),allPages('/employees'),allPages(`/attendance?from=${range.from}&to=${range.to}`)]);})
-      .then(([u,p,c,e,a])=>{if(!active)return;setUser(u);setPolicy(p);setRequests(c.map(correctionRow));setEmployees(e.map(x=>({...x,phone:x.phone||"",dept:x.dept||"—"})));setRecords(a.map(attendanceRow));})
+    Promise.resolve().then(()=>{if(active){setIsLoading(true);setApiError('');}return Promise.all([api('/auth/me'),api('/policy'),allPages('/corrections'),allPages('/employees'),allPages(`/attendance?from=${range.from}&to=${range.to}`),api('/departments')]);})
+      .then(([u,p,c,e,a,d])=>{if(!active)return;setUser(u);setPolicy(p);setRequests(c.map(correctionRow));setEmployees(e.map(x=>({...x,phone:x.phone||"",dept:x.dept||"—"})));setRecords(a.map(attendanceRow));setDeptList(d);})
       .catch(e=>{if(active)setApiError(e.message);})
       .finally(()=>{if(active)setIsLoading(false);});return()=>{active=false;};
   },[selectedMonth,reload]);
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = emp.name.toLowerCase().includes(empSearchTerm.toLowerCase()) || emp.empId.toLowerCase().includes(empSearchTerm.toLowerCase()) || emp.phone.includes(empSearchTerm);
-    const matchesDept = empDeptFilter === 'Tất cả phòng ban' || emp.dept === empDeptFilter;
+    const matchesDept = empDeptFilter === 'Tất cả phòng ban' || (empDeptFilter === '__unassigned__' ? !emp.dept : emp.dept === empDeptFilter);
     return matchesSearch && matchesDept;
   });
   const currentEmployees = filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -98,9 +101,10 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
   // ================= CÁC HÀM XỬ LÝ =================
   const handleAction=async(action,id)=>{try{setApiError('');const note=window.prompt('Ghi chú xét duyệt (không bắt buộc):','');if(note===null)return;await api(`/corrections/${id}/review`,{method:'POST',body:{approve:action==='Duyệt',note}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const handleAddEmployee=async(e)=>{e.preventDefault();setIsSubmittingEmp(true);setApiError('');const data=new FormData(e.currentTarget);try{await api('/employees',{method:'POST',body:{employeeCode:data.get('employeeCode'),fullName:data.get('fullName'),password:data.get('password')}});setShowAddEmpModal(false);setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmittingEmp(false);}};
-  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE'}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const handleAddEmployee=async(e)=>{e.preventDefault();setIsSubmittingEmp(true);setApiError('');const data=new FormData(e.currentTarget);const dId=data.get('departmentId');try{await api('/employees',{method:'POST',body:{employeeCode:data.get('employeeCode'),fullName:data.get('fullName'),password:data.get('password'),departmentId:dId?Number(dId):null}});setShowAddEmpModal(false);setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmittingEmp(false);}};
+  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',departmentId:emp.deptId?Number(emp.deptId):null}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE',departmentId:emp.deptId?Number(emp.deptId):null}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const [assignDeptEmp, setAssignDeptEmp] = useState(null);
 
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -326,12 +330,10 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
           <svg className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
           <input type="text" value={empSearchTerm} onChange={(e) => setEmpSearchTerm(e.target.value)} placeholder="Tìm kiếm theo Tên, Mã NV..." className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition-all" />
         </div>
-        <select disabled title="Chờ phê duyệt lưu phòng ban" value={empDeptFilter} onChange={(e) => setEmpDeptFilter(e.target.value)} className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none hover:bg-gray-50 transition-colors min-w-[200px] cursor-pointer shadow-sm">
+        <select value={empDeptFilter} onChange={(e) => setEmpDeptFilter(e.target.value)} className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none hover:bg-gray-50 transition-colors min-w-[200px] cursor-pointer shadow-sm">
           <option value="Tất cả phòng ban">Tất cả phòng ban</option>
-          <option value="Phòng Kinh doanh">Phòng Kinh doanh</option>
-          <option value="Phòng Kế toán">Phòng Kế toán</option>
-          <option value="Phòng Kỹ thuật">Phòng Kỹ thuật</option>
-          <option value="Phòng Nhân sự">Phòng Nhân sự</option>
+          <option value="__unassigned__">Chưa phân phòng ban</option>
+          {[...new Set(employees.filter(e=>e.dept).map(e=>e.dept))].sort().map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
 
@@ -350,7 +352,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <td className="p-4 text-sm text-gray-600 font-bold">{emp.phone}</td>
                   <td className="p-4">{emp.workStatus === 'Đang làm việc' ? <span className="px-2.5 py-1 bg-green-50 text-green-600 rounded text-xs font-bold border border-green-100">Đang làm việc</span> : <span className="px-2.5 py-1 bg-gray-100 text-gray-500 rounded text-xs font-bold border border-gray-200">Đã nghỉ việc</span>}</td>
                   <td className="p-4">{emp.hasFaceData ? <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-md text-xs font-bold border border-emerald-100 flex items-center gap-1.5 w-max"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg> Đã cập nhật</span> : <span className="px-3 py-1 bg-orange-50 text-orange-600 rounded-md text-xs font-bold border border-orange-100 flex items-center gap-1.5 w-max"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Chưa cập nhật</span>}</td>
-                  <td className="p-4 text-center"><div className="flex flex-col gap-2"><button disabled={emp.workStatus!=='Đang làm việc'} onClick={()=>{setNotice('');setFaceEmployee(emp);}} className="text-sm font-bold text-blue-600 disabled:text-gray-400 disabled:cursor-not-allowed">{emp.hasFaceData?'Cập nhật khuôn mặt':'Đăng ký khuôn mặt'}</button><button onClick={()=>editEmployee(emp)} className="text-blue-600 text-sm font-bold">Đổi tên</button><button onClick={()=>toggleEmployee(emp)} className="text-sm underline">{emp.workStatus==='Đang làm việc'?'Ngừng hoạt động':'Kích hoạt lại'}</button></div></td>
+                  <td className="p-4 text-center"><div className="flex flex-col gap-2"><button disabled={emp.workStatus!=='Đang làm việc'} onClick={()=>{setNotice('');setFaceEmployee(emp);}} className="text-sm font-bold text-blue-600 disabled:text-gray-400 disabled:cursor-not-allowed">{emp.hasFaceData?'Cập nhật khuôn mặt':'Đăng ký khuôn mặt'}</button><button onClick={()=>editEmployee(emp)} className="text-blue-600 text-sm font-bold">Đổi tên</button><button onClick={()=>setAssignDeptEmp(emp)} className="text-blue-600 text-sm font-bold">Gán phòng ban</button><button onClick={()=>toggleEmployee(emp)} className="text-sm underline">{emp.workStatus==='Đang làm việc'?'Ngừng hoạt động':'Kích hoạt lại'}</button></div></td>
                 </tr>
               ))
             )}
@@ -463,6 +465,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <nav className="flex-1 flex flex-col gap-2 px-3 mt-2">
           <button onClick={() => setActiveTab('TONG_QUAN')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'TONG_QUAN' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>Tổng quan</button>
           <button onClick={() => setActiveTab('NHAN_VIEN')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'NHAN_VIEN' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>Nhân viên</button>
+          <button onClick={() => setActiveTab('PHONG_BAN')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'PHONG_BAN' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>Phòng ban</button>
           <button onClick={() => setActiveTab('BANG_CONG')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'BANG_CONG' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>Bảng công</button>
           <button onClick={() => setActiveTab('YEU_CAU')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'YEU_CAU' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Yêu cầu chờ duyệt</button>
           <button onClick={() => setActiveTab('CAU_HINH_LICH')} aria-current={activeTab === 'CAU_HINH_LICH' ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'CAU_HINH_LICH' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" strokeLinecap="round" d="M8 3v4m8-4v4M4 10h16M5 5h14a1 1 0 011 1v14H4V6a1 1 0 011-1z"/></svg>Cấu hình lịch</button>
@@ -473,7 +476,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <header className="bg-white px-8 py-4 flex justify-between items-center border-b border-gray-100 shrink-0 sticky top-0 z-10">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
-              {activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
+              {activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'PHONG_BAN' && 'Quản lý phòng ban'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
             </h2>
           </div>
           <div className="flex items-center gap-5" ref={headerRef}>
@@ -508,16 +511,28 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <div className="p-8 max-w-7xl mx-auto w-full"><div className="mb-4 flex gap-3"><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
           {apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3 mb-3">{apiError}</p>}
           {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa xác nhận ngày làm việc. Chưa tính tổng ngày vắng.</p>}
-          <p className="text-sm text-gray-500 mb-3">Phòng ban, số điện thoại và tệp đính kèm chưa được lưu: đang chờ phê duyệt thay đổi CSDL.</p>
+          <p className="text-sm text-gray-500 mb-3">Số điện thoại và tệp đính kèm chưa được lưu: đang chờ phê duyệt thay đổi CSDL.</p>
           {activeTab === 'CAU_HINH_LICH' && <SchedulePanel/>}
           {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}
           {activeTab === 'NHAN_VIEN' && <div className="animate-fade-in">{renderEmployeesTable()}</div>}
+          {activeTab === 'PHONG_BAN' && <DepartmentPanel employees={employees} onReload={()=>setReload(x=>x+1)}/>}
           {activeTab === 'BANG_CONG' && <div className="animate-fade-in">{renderAttendanceTableFull()}</div>}
           {activeTab === 'YEU_CAU' && <div className="animate-fade-in">{renderRequestsCardsView()}</div>}
         </div>
       </div>
       
+      {assignDeptEmp && (
+        <Modal title={`Gán phòng ban — ${assignDeptEmp.name}`} onClose={()=>setAssignDeptEmp(null)}>
+          <form onSubmit={async(ev)=>{ev.preventDefault();const dId=new FormData(ev.currentTarget).get('deptId');try{await api(`/employees/${assignDeptEmp.id}`,{method:'PATCH',body:{fullName:assignDeptEmp.name,status:assignDeptEmp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',departmentId:dId?Number(dId):null}});setAssignDeptEmp(null);setReload(x=>x+1);}catch(err){setApiError(err.message);}}}>
+            <select name="deptId" defaultValue={assignDeptEmp.deptId||''} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer mb-4">
+              <option value="">— Không thuộc phòng ban —</option>
+              {deptList.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <div className="flex gap-3"><button type="button" onClick={()=>setAssignDeptEmp(null)} className="w-1/2 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium text-sm">Hủy</button><button type="submit" className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm">Lưu</button></div>
+          </form>
+        </Modal>
+      )}
       {showPasswordDialog && <PasswordDialog onClose={()=>setShowPasswordDialog(false)}/>}
       {faceEmployee && <FaceEnrollmentDialog employee={faceEmployee} onClose={()=>setFaceEmployee(null)} onSaved={employee=>{setFaceEmployee(null);setNotice(`Đã lưu khuôn mặt cho ${employee.name}.`);setReload(x=>x+1);}}/>}
       {/* Modal Thêm Nhân viên */}
@@ -545,8 +560,9 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Phòng ban</label>
-                    <select disabled title="Chờ phê duyệt CSDL" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                      <option>Phòng Kinh doanh</option><option>Phòng Kế toán</option><option>Phòng Kỹ thuật</option><option>Phòng Nhân sự</option>
+                    <select name="departmentId" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                      <option value="">— Chưa chỉ định —</option>
+                      {deptList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
                   <div>

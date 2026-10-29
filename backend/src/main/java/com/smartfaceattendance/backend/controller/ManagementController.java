@@ -16,18 +16,21 @@ public class ManagementController {
   private final ShiftService shifts;
   private final AttendanceService attendance;
   private final CorrectionService corrections;
+  private final DepartmentService departments;
 
   public ManagementController(
       IdentityService i,
       EmployeeService e,
       ShiftService s,
       AttendanceService a,
-      CorrectionService c) {
+      CorrectionService c,
+      DepartmentService d) {
     identity = i;
     employees = e;
     shifts = s;
     attendance = a;
     corrections = c;
+    departments = d;
   }
 
   public static <T> Map<String, Object> page(List<T> data, int page, int size) {
@@ -50,16 +53,50 @@ public class ManagementController {
     return Map.of("status", "UP");
   }
 
+  @GetMapping("/departments")
+  public Object departments() {
+    identity.manager();
+    return departments.list();
+  }
+
+  @PostMapping("/departments")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  public Object createDepartment(@Valid @RequestBody DepartmentRequest r) {
+    identity.manager();
+    return departments.create(r);
+  }
+
+  @PatchMapping("/departments/{id}")
+  public Object updateDepartment(@PathVariable Long id, @Valid @RequestBody DepartmentRequest r) {
+    identity.manager();
+    return departments.update(id, r);
+  }
+
+  @DeleteMapping("/departments/{id}")
+  @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+  public void deleteDepartment(@PathVariable Long id) {
+    identity.manager();
+    departments.delete(id);
+  }
+
   @GetMapping("/employees")
   public Object employees(
       @RequestParam(defaultValue = "") String search,
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "100") int size) {
+      @RequestParam(defaultValue = "100") int size,
+      @RequestParam(required = false) Long departmentId,
+      @RequestParam(required = false) String unassigned) {
     identity.manager();
     var q = search.toLowerCase();
     return page(
         employees.list().stream()
             .filter(e -> e.name().toLowerCase().contains(q) || e.empId().toLowerCase().contains(q))
+            .filter(
+                e -> {
+                  if ("true".equals(unassigned)) return e.dept() == null;
+                  if (departmentId != null) return departmentId.toString().equals(e.deptId());
+                  return true;
+                })
             .toList(),
         page,
         size);

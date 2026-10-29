@@ -1,4 +1,4 @@
--- 1. employees (no FK dependencies)
+-- 1. Drop all tables (reverse dependency order)
 DROP TABLE IF EXISTS `correction_requests`;
 DROP TABLE IF EXISTS `attendance_events`;
 DROP TABLE IF EXISTS `face_enrollments`;
@@ -6,16 +6,35 @@ DROP TABLE IF EXISTS `shift_milestones`;
 DROP TABLE IF EXISTS `user_accounts`;
 DROP TABLE IF EXISTS `shifts`;
 DROP TABLE IF EXISTS `employees`;
+DROP TABLE IF EXISTS `departments`;
 
+-- 2. departments (no FK dependencies)
+CREATE TABLE `departments` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `manager_id` bigint DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_departments_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. employees (FK → departments)
 CREATE TABLE `employees` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_code` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `full_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `department_id` bigint DEFAULT NULL,
   `status` enum('ACTIVE','INACTIVE') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ACTIVE',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_employees_code` (`employee_code`)
+  UNIQUE KEY `uq_employees_code` (`employee_code`),
+  KEY `ix_employees_department` (`department_id`),
+  CONSTRAINT `fk_employees_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- deferred FK: departments.manager_id → employees.id
+ALTER TABLE `departments` ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`manager_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL;
 
 -- 2. shifts (no FK dependencies)
 CREATE TABLE `shifts` (

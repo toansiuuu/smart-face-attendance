@@ -90,6 +90,22 @@ CREATE TABLE `attendance_events` (
   CONSTRAINT `fk_events_shift` FOREIGN KEY (`shift_id`) REFERENCES `shifts` (`id`) ON DELETE RESTRICT
 );
 
+CREATE TABLE `leave_requests` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `employee_id` bigint NOT NULL,
+  `leave_type` enum('ANNUAL','SICK','PERSONAL','OTHER') NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `reason` text NOT NULL,
+  `status` enum('PENDING','APPROVED','REJECTED','CANCELLED') NOT NULL DEFAULT 'PENDING',
+  `approved_by` bigint DEFAULT NULL,
+  `review_note` varchar(500) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_leave_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_leave_approver` FOREIGN KEY (`approved_by`) REFERENCES `user_accounts` (`id`) ON DELETE SET NULL
+);
+
 CREATE TABLE `correction_requests` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_id` bigint NOT NULL,

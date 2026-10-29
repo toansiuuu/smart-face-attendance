@@ -19,6 +19,7 @@ public class ManagementController {
   private final CorrectionService corrections;
   private final DepartmentService departments;
   private final HolidayService holidays;
+  private final LeaveService leave;
 
   public ManagementController(
       IdentityService i,
@@ -27,7 +28,8 @@ public class ManagementController {
       AttendanceService a,
       CorrectionService c,
       DepartmentService d,
-      HolidayService h) {
+      HolidayService h,
+      LeaveService l) {
     identity = i;
     employees = e;
     shifts = s;
@@ -35,6 +37,7 @@ public class ManagementController {
     corrections = c;
     departments = d;
     holidays = h;
+    leave = l;
   }
 
   public static <T> Map<String, Object> page(List<T> data, int page, int size) {
@@ -152,6 +155,42 @@ public class ManagementController {
   public void deleteHoliday(@PathVariable Long id) {
     identity.manager();
     holidays.delete(id);
+  }
+
+  @GetMapping("/leave-requests")
+  public Object leaveRequests(
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) Long employeeId) {
+    var user = identity.current();
+    if ("MANAGER".equals(user.role)) {
+      if ("PENDING".equals(status)) return leave.listPending();
+      if (employeeId != null) return leave.listForEmployee(employeeId);
+      return leave.listPending();
+    }
+    return leave.listForEmployee(identity.employee().employeeId);
+  }
+
+  @PostMapping("/leave-requests")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  public Object createLeave(@Valid @RequestBody LeaveRequestDto r) {
+    return leave.create(identity.employee(), r);
+  }
+
+  @PostMapping("/leave-requests/{id}/review")
+  public Object reviewLeave(@PathVariable Long id, @Valid @RequestBody ReviewRequest r) {
+    return leave.review(identity.manager(), id, r);
+  }
+
+  @PostMapping("/leave-requests/{id}/cancel")
+  public void cancelLeave(@PathVariable Long id) {
+    leave.cancel(identity.employee(), id);
+  }
+
+  @GetMapping("/leave-balance")
+  public Object leaveBalance(@RequestParam(defaultValue = "0") int year) {
+    var account = identity.employee();
+    if (year <= 0) year = LocalDate.now().getYear();
+    return leave.balance(account.employeeId, year);
   }
 
   @GetMapping("/shifts")

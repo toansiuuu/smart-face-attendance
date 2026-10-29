@@ -17,6 +17,8 @@ public class AttendanceService {
   private final AttendanceEventRepository events;
   private final CorrectionRepository corrections;
   private final ShiftService shifts;
+  private final HolidayService holidayService;
+  private final LeaveService leaveService;
   private final Set<DayOfWeek> workingDays;
   private final int grace;
 
@@ -25,12 +27,16 @@ public class AttendanceService {
       AttendanceEventRepository a,
       CorrectionRepository c,
       ShiftService s,
+      HolidayService h,
+      LeaveService l,
       @Value("${app.working-days:}") String days,
       @Value("${app.grace-minutes:0}") int g) {
     employees = e;
     events = a;
     corrections = c;
     shifts = s;
+    holidayService = h;
+    leaveService = l;
     grace = g;
     if (g < 0) throw new IllegalArgumentException("Grace cannot be negative");
     workingDays = new HashSet<>();
@@ -146,7 +152,9 @@ public class AttendanceService {
     String status = "Đang diễn ra";
     boolean complete = times.size() == 4;
     var now = now();
-    if (sid == null) status = "Chưa cấu hình lịch";
+    if (holidayService.isHoliday(date) && times.isEmpty()) status = "Ngày lễ";
+    else if (leaveService.isOnLeave(e.id, date) && times.isEmpty()) status = "Nghỉ phép";
+    else if (sid == null) status = "Chưa cấu hình lịch";
     else if (!AttendanceMath.ordered(times)) status = "Sai thứ tự giờ";
     else if (policyConfigured() && !workingDays.contains(date.getDayOfWeek()) && times.isEmpty())
       status = "Ngày nghỉ";

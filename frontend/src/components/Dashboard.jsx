@@ -2,6 +2,7 @@ import SchedulePanel from './SchedulePanel';
 import PasswordDialog from './PasswordDialog';
 import FaceEnrollmentDialog from './FaceEnrollmentDialog';
 import DepartmentPanel from './DepartmentPanel';
+import HolidayPanel from './HolidayPanel';
 import Modal from './Modal';
 import {api,allPages,localDay,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,logout} from '../api';
 import { useState, useEffect, useRef } from 'react';
@@ -469,6 +470,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
           <button onClick={() => setActiveTab('PHONG_BAN')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'PHONG_BAN' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>Phòng ban</button>
           <button onClick={() => setActiveTab('BANG_CONG')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'BANG_CONG' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>Bảng công</button>
           <button onClick={() => setActiveTab('YEU_CAU')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'YEU_CAU' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Yêu cầu chờ duyệt</button>
+          <button onClick={() => setActiveTab('NGAY_LE')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'NGAY_LE' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>Ngày lễ</button>
           <button onClick={() => setActiveTab('CAU_HINH_LICH')} aria-current={activeTab === 'CAU_HINH_LICH' ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'CAU_HINH_LICH' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" strokeLinecap="round" d="M8 3v4m8-4v4M4 10h16M5 5h14a1 1 0 011 1v14H4V6a1 1 0 011-1z"/></svg>Cấu hình lịch</button>
         </nav>
       </div>
@@ -477,7 +479,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <header className="bg-white px-8 py-4 flex justify-between items-center border-b border-gray-100 shrink-0 sticky top-0 z-10">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
-              {activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'PHONG_BAN' && 'Quản lý phòng ban'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
+              {activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'PHONG_BAN' && 'Quản lý phòng ban'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'NGAY_LE' && 'Quản lý ngày lễ'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
             </h2>
           </div>
           <div className="flex items-center gap-5" ref={headerRef}>
@@ -512,6 +514,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <div className="p-8 max-w-7xl mx-auto w-full"><div className="mb-4 flex gap-3"><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
           {apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3 mb-3">{apiError}</p>}
           {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa xác nhận ngày làm việc. Chưa tính tổng ngày vắng.</p>}
+          {activeTab === 'NGAY_LE' && <HolidayPanel/>}
           {activeTab === 'CAU_HINH_LICH' && <SchedulePanel/>}
           {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}

@@ -30,6 +30,16 @@ CREATE TABLE `user_accounts` (
   CONSTRAINT `ck_employee_account_has_employee` CHECK (((`role` <> 'EMPLOYEE') or (`employee_id` is not null)))
 );
 
+CREATE TABLE `holidays` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `holiday_date` date NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `is_recurring` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_holidays_date` (`holiday_date`)
+);
+
 CREATE TABLE `shifts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `shift_code` varchar(32) NOT NULL,

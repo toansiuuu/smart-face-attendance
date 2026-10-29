@@ -18,6 +18,7 @@ public class ManagementController {
   private final AttendanceService attendance;
   private final CorrectionService corrections;
   private final DepartmentService departments;
+  private final HolidayService holidays;
 
   public ManagementController(
       IdentityService i,
@@ -25,13 +26,15 @@ public class ManagementController {
       ShiftService s,
       AttendanceService a,
       CorrectionService c,
-      DepartmentService d) {
+      DepartmentService d,
+      HolidayService h) {
     identity = i;
     employees = e;
     shifts = s;
     attendance = a;
     corrections = c;
     departments = d;
+    holidays = h;
   }
 
   public static <T> Map<String, Object> page(List<T> data, int page, int size) {
@@ -122,6 +125,33 @@ public class ManagementController {
   public Object uploadAvatar(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
     identity.manager();
     return employees.uploadAvatar(id, file);
+  }
+
+  @GetMapping("/holidays")
+  public Object holidays(@RequestParam(defaultValue = "0") int year) {
+    identity.current();
+    if (year <= 0) year = LocalDate.now().getYear();
+    return holidays.list(year);
+  }
+
+  @PostMapping("/holidays")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  public Object createHoliday(@Valid @RequestBody HolidayRequest r) {
+    identity.manager();
+    return holidays.create(r);
+  }
+
+  @PatchMapping("/holidays/{id}")
+  public Object updateHoliday(@PathVariable Long id, @Valid @RequestBody HolidayRequest r) {
+    identity.manager();
+    return holidays.update(id, r);
+  }
+
+  @DeleteMapping("/holidays/{id}")
+  @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+  public void deleteHoliday(@PathVariable Long id) {
+    identity.manager();
+    holidays.delete(id);
   }
 
   @GetMapping("/shifts")

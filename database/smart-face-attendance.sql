@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS `shift_milestones`;
 DROP TABLE IF EXISTS `user_accounts`;
 DROP TABLE IF EXISTS `shifts`;
 DROP TABLE IF EXISTS `employees`;
+DROP TABLE IF EXISTS `holidays`;
 DROP TABLE IF EXISTS `departments`;
 
 -- 2. departments (no FK dependencies)
@@ -41,6 +42,17 @@ CREATE TABLE `employees` (
 
 -- deferred FK: departments.manager_id → employees.id
 ALTER TABLE `departments` ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`manager_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL;
+
+-- holidays (no FK dependencies)
+CREATE TABLE `holidays` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `holiday_date` date NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_recurring` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_holidays_date` (`holiday_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. shifts (no FK dependencies)
 CREATE TABLE `shifts` (

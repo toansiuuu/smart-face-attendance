@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import java.time.*;
 import java.util.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api")
@@ -90,7 +91,9 @@ public class ManagementController {
     var q = search.toLowerCase();
     return page(
         employees.list().stream()
-            .filter(e -> e.name().toLowerCase().contains(q) || e.empId().toLowerCase().contains(q))
+            .filter(e -> e.name().toLowerCase().contains(q) || e.empId().toLowerCase().contains(q)
+                || (e.email() != null && e.email().toLowerCase().contains(q))
+                || (e.phone() != null && e.phone().contains(q)))
             .filter(
                 e -> {
                   if ("true".equals(unassigned)) return e.dept() == null;
@@ -113,6 +116,12 @@ public class ManagementController {
   public Object update(@PathVariable Long id, @Valid @RequestBody EmployeeUpdate r) {
     identity.manager();
     return employees.update(id, r);
+  }
+
+  @PostMapping("/employees/{id}/avatar")
+  public Object uploadAvatar(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+    identity.manager();
+    return employees.uploadAvatar(id, file);
   }
 
   @GetMapping("/shifts")

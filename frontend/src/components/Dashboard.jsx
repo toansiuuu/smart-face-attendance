@@ -101,9 +101,10 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
   // ================= CÁC HÀM XỬ LÝ =================
   const handleAction=async(action,id)=>{try{setApiError('');const note=window.prompt('Ghi chú xét duyệt (không bắt buộc):','');if(note===null)return;await api(`/corrections/${id}/review`,{method:'POST',body:{approve:action==='Duyệt',note}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const handleAddEmployee=async(e)=>{e.preventDefault();setIsSubmittingEmp(true);setApiError('');const data=new FormData(e.currentTarget);const dId=data.get('departmentId');try{await api('/employees',{method:'POST',body:{employeeCode:data.get('employeeCode'),fullName:data.get('fullName'),password:data.get('password'),departmentId:dId?Number(dId):null}});setShowAddEmpModal(false);setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmittingEmp(false);}};
-  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',departmentId:emp.deptId?Number(emp.deptId):null}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:{fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE',departmentId:emp.deptId?Number(emp.deptId):null}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const handleAddEmployee=async(e)=>{e.preventDefault();setIsSubmittingEmp(true);setApiError('');const data=new FormData(e.currentTarget);const dId=data.get('departmentId');try{await api('/employees',{method:'POST',body:{employeeCode:data.get('employeeCode'),fullName:data.get('fullName'),password:data.get('password'),departmentId:dId?Number(dId):null,phone:data.get('phone')||null,email:data.get('email')||null,position:data.get('position')||null,dateOfBirth:data.get('dateOfBirth')||null,gender:data.get('gender')||null}});setShowAddEmpModal(false);setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmittingEmp(false);}};
+  const empPatchBody=(emp,overrides={})=>({fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',departmentId:emp.deptId?Number(emp.deptId):null,phone:emp.phone||null,email:emp.email||null,position:emp.position||null,dateOfBirth:emp.dateOfBirth||null,gender:emp.gender||null,...overrides});
+  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{fullName:name})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
   const [assignDeptEmp, setAssignDeptEmp] = useState(null);
 
   const handleExportExcel = async () => {
@@ -511,7 +512,6 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <div className="p-8 max-w-7xl mx-auto w-full"><div className="mb-4 flex gap-3"><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
           {apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3 mb-3">{apiError}</p>}
           {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa xác nhận ngày làm việc. Chưa tính tổng ngày vắng.</p>}
-          <p className="text-sm text-gray-500 mb-3">Số điện thoại và tệp đính kèm chưa được lưu: đang chờ phê duyệt thay đổi CSDL.</p>
           {activeTab === 'CAU_HINH_LICH' && <SchedulePanel/>}
           {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}
@@ -524,7 +524,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
       
       {assignDeptEmp && (
         <Modal title={`Gán phòng ban — ${assignDeptEmp.name}`} onClose={()=>setAssignDeptEmp(null)}>
-          <form onSubmit={async(ev)=>{ev.preventDefault();const dId=new FormData(ev.currentTarget).get('deptId');try{await api(`/employees/${assignDeptEmp.id}`,{method:'PATCH',body:{fullName:assignDeptEmp.name,status:assignDeptEmp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',departmentId:dId?Number(dId):null}});setAssignDeptEmp(null);setReload(x=>x+1);}catch(err){setApiError(err.message);}}}>
+          <form onSubmit={async(ev)=>{ev.preventDefault();const dId=new FormData(ev.currentTarget).get('deptId');try{await api(`/employees/${assignDeptEmp.id}`,{method:'PATCH',body:empPatchBody(assignDeptEmp,{departmentId:dId?Number(dId):null})});setAssignDeptEmp(null);setReload(x=>x+1);}catch(err){setApiError(err.message);}}}>
             <select name="deptId" defaultValue={assignDeptEmp.deptId||''} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer mb-4">
               <option value="">— Không thuộc phòng ban —</option>
               {deptList.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
@@ -567,7 +567,34 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Số điện thoại</label>
-                    <input type="text" disabled placeholder="Chưa hỗ trợ lưu SĐT" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" name="phone" maxLength={11} placeholder="VD: 0901234567" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                    <input type="email" name="email" maxLength={255} placeholder="VD: nva@company.com" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Chức vụ</label>
+                    <input type="text" name="position" maxLength={100} placeholder="VD: Nhân viên" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Ngày sinh</label>
+                    <input type="date" name="dateOfBirth" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Giới tính</label>
+                    <select name="gender" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                      <option value="">— Chưa chỉ định —</option>
+                      <option value="MALE">Nam</option>
+                      <option value="FEMALE">Nữ</option>
+                      <option value="OTHER">Khác</option>
+                    </select>
                   </div>
                 </div>
 

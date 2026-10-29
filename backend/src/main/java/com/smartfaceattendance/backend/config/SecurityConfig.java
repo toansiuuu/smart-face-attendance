@@ -30,6 +30,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/health", "/error")
                     .permitAll()
+                    .requestMatchers("/uploads/**")
+                    .permitAll()
                     .requestMatchers("/api/**")
                     .authenticated()
                     .anyRequest()

@@ -14,67 +14,105 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 | Face Liveness | Python API using supplied ONNX detector and anti-spoofing model in `deploy/` |
 | Face Identity Recognition | OpenCV SFace with a persistent embedding gallery in the Python face service |
 
-## Prerequisites
+## Run the whole program (recommended: Docker)
 
-- Java 21+
-- Node.js 18+
-- Docker Desktop
+### Prerequisites
 
-## Quick Start
+- Install Docker Desktop and complete its first-run setup. Use Linux containers.
+- Keep several GB free on the drive containing Docker storage (normally C:).
+- Internet access is needed for the first build to download images and dependencies.
 
-### Start everything with Bash (Docker)
+You do **not** need to install Java, Node.js, Maven, or Python on Windows when
+using this method. Docker runs all four services: MySQL, the Python face service
+(liveness and identity matching), the Java backend, and the React frontend.
 
-On **Windows Command Prompt**, use the native launcher instead:
+### Start on Windows Command Prompt
+
+Open **Command Prompt (CMD)** and run:
 
 ```cmd
 cd /d D:\3monthslearnOOPSQL\smart-face-attendance-main
 run-all.bat
 ```
 
-It starts Docker Desktop if necessary, then builds and starts all four services.
-Finish any first-run setup shown by Docker Desktop if the launcher reports that
-the engine is not ready.
+Use your actual project folder if you cloned it elsewhere. The `/d` above is the
+Windows `cd` option; do not use the Git Bash path `/d/3monthslearnOOPSQL/...` in CMD.
+You can also double-click `run-all.bat` in File Explorer.
 
-Start Docker Desktop, then run from the project root in **Git Bash** on Windows
-or Bash on Linux/macOS:
+The launcher starts Docker Desktop if necessary, generates a shared face-service
+secret, builds the application, and waits for the services to become ready.
+The first build can take several minutes; later runs reuse cached dependencies.
+If Docker displays a setup or WSL prompt, complete it and run the launcher again.
+
+When startup finishes, open [http://localhost:5173/login](http://localhost:5173/login).
+The seeded development account is:
+
+- Username: `admin`
+- Password: `admin1234567890` (unless you changed it)
+
+The services run in the background. Closing the terminal or browser does **not**
+stop them.
+
+### Stop the whole program
+
+From Command Prompt, run:
+
+```cmd
+cd /d D:\3monthslearnOOPSQL\smart-face-attendance-main
+docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face stop
+```
+
+This stops all four application services and keeps your employees, attendance,
+face enrollments, and uploaded files. Docker Desktop itself can remain open.
+
+**Do not use `docker compose down -v` for a normal shutdown:** it deletes the
+application's database volumes, including saved face embeddings.
+
+### Run again another time
+
+Use the same launcher:
+
+```cmd
+cd /d D:\3monthslearnOOPSQL\smart-face-attendance-main
+run-all.bat
+```
+
+Your existing data is reused. Running this after pulling source changes also
+rebuilds the affected services. Older database schemas may still need the SQL
+migrations in `database/migrations`; the launcher does not apply them automatically.
+
+### Check status or read logs
+
+Run these commands from the project folder:
+
+```cmd
+docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face ps
+docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face logs -f --tail 100
+```
+
+Press `Ctrl+C` to stop following logs; this does not stop the application.
+If startup reports low disk space, free space on Docker's storage drive before
+retrying. If the engine is not ready, open Docker Desktop and check its status.
+
+### Git Bash, Linux, or macOS
+
+Start Docker, open Bash in the project folder, and run:
 
 ```bash
 bash run-all.sh
 ```
 
-This builds and starts MySQL, Python liveness, Java backend, and React frontend.
-It generates a shared service secret and waits for the app to respond. Open
-http://localhost:5173/login. The first build downloads dependencies and can take
-several minutes. Existing database volumes are preserved; older schemas may need
-the SQL migrations. The launcher configures identity matching and liveness automatically.
+The same Docker Compose `stop`, `ps`, and `logs` commands above work in Bash.
 
-To stop the services while preserving data:
+### Run components locally (development only)
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face stop
-```
-
-### Run services locally
-
-```bash
-# 1. Clone
-git clone https://github.com/toansiuuu/smart-face-attendance.git
-cd smart-face-attendance
-
-# 2. Start MySQL
-docker compose up -d
-
-# 3. Start backend
-cd backend
-mvn spring-boot:run
-
-# 4. Start frontend (new terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-Open http://localhost:5173/login — login with `admin` / `admin1234567890`
+For local development outside Docker, install a JDK compatible with the backend's
+Java 17 target, Maven, a Node.js version supported by Vite (the Docker image uses
+Node 22), and Python 3.11. Start MySQL with `docker compose up -d`, then follow
+[the face-service setup](deploy/README.md) to configure Python and Java with matching
+secrets and URLs. In a separate terminal, run `npm install` and `npm run dev`
+inside `frontend`. Stop foreground development servers with `Ctrl+C` in their
+respective terminals; stop MySQL with `docker compose stop mysql`.
 
 ## Project Structure
 

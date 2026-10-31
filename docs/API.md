@@ -114,5 +114,38 @@ Remote enrollment and a MySQL transaction are not one distributed transaction. I
 
 - Roles and enabled status are loaded from user_accounts on each account API request.
 - Deactivation blocks linked-account access and future scans. No destructive employee deletion API exists.
-- Changing a password invalidates the current session only. Other existing sessions expire normally; central revocation is not implemented.
-- Add request-size limits, login/scan throttling, TLS and secret management at the deployment boundary before public exposure. No account recovery flow is included.
+- Authenticated sessions include a password fingerprint. Changing or recovering a password makes all earlier sessions fail their next identity check.
+- Add request-size limits, login/scan throttling, TLS and secret management at the deployment boundary before public exposure.
+
+## Password recovery (email / SMS)
+
+- `GET /api/auth/password-recovery/options`: public; returns `emailEnabled` and
+  `smsEnabled` based on global provider configuration, never on an account.
+- `POST /api/auth/password-recovery/request`: public but CSRF-protected. Body:
+  `{"username":"SV0003","channel":"EMAIL","contact":"registered@example.com"}`
+  or channel `SMS` with the registered phone number. Returns a random `requestId`,
+  generic `message`, `expiresInSeconds=600`, and `retryAfterSeconds=60`.
+- `POST /api/auth/password-recovery/reset`: public but CSRF-protected. Body:
+  `{"requestId":"UUID","code":"123456","newPassword":"a-new-long-password"}`.
+  Returns a confirmation message on success; does not automatically log in.
+
+Codes are generated with SecureRandom, BCrypt-hashed in MySQL, valid for ten
+minutes, and consumed atomically. Five incorrect attempts lock that request.
+Invalid/expired/reused codes return 400; excessive requests return 429; an
+unconfigured channel returns 503. Unknown accounts and mismatched contacts receive
+the same response structure and no delivery. Disabled accounts cannot recover.
+Contact or password changes invalidate outstanding recovery requests.
+
+SMTP/Twilio delivery runs after transaction commit on a bounded executor; codes,
+destinations, credentials, and provider response bodies are never logged or
+returned by these APIs. Provider failures are logged generically. Configuration
+presence does not guarantee provider acceptance or delivery; inspect the provider
+console when needed. No messages are sent by tests to real email/SMS accounts.
+
+Rate limits persist in the recovery table and are serialized by the application's
+single backend instance. A multi-instance deployment also needs a shared atomic
+limiter. Records older than one day are cleaned up during recovery requests.
+The backend creates this new table idempotently using `db/password-reset.sql`;
+it does not recreate existing application tables.
+
+See the README's recovery section and `.env.example` for setup.

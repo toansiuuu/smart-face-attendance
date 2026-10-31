@@ -1,11 +1,13 @@
 import {api} from '../api';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ForgotPasswordDialog from './ForgotPasswordDialog';
 
 const Login = () => {
   const navigate = useNavigate();
   const [userId, setUserId] = useState(''); 
   const [password, setPassword] = useState('');
+  const [forgotPassword, setForgotPassword] = useState(false);
   
   // State quản lý ẩn/hiện mật khẩu bằng icon con mắt ở input
   const [showPassword, setShowPassword] = useState(false);
@@ -82,7 +84,9 @@ const Login = () => {
             Đăng nhập
           </button>
         </form>
+        <button type="button" disabled={busy} onClick={() => setForgotPassword(true)} className="mt-5 w-full text-center text-sm font-medium text-blue-700 hover:underline disabled:opacity-50">Quên mật khẩu?</button>
       </div>
+      {forgotPassword && <ForgotPasswordDialog initialUsername={userId} onClose={() => setForgotPassword(false)}/>}
     </div>
   );
 };

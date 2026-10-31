@@ -12,6 +12,29 @@ Read one flow at a time. Start with login, because every protected feature build
 6. `AuthController` creates a fresh session, stores the authenticated security context and returns a safe user response. It does **not** insert a new account on login.
 7. React routes MANAGER to `/admin`, EMPLOYEE to `/employee`. `Protected.jsx` checks `/auth/me` on page entry. Backend role checks remain the actual authority.
 
+The session principal also stores a fingerprint of the password hash.
+`IdentityService.current` compares it with the current account on each identity
+check, so changing or recovering a password makes earlier sessions invalid.
+
+### Forgot password
+
+`ForgotPasswordDialog.jsx` checks globally enabled email/SMS channels, then submits
+username, channel, and the registered contact to `PasswordRecoveryController`.
+`PasswordRecoveryService` applies persisted rate limits, generates a six-digit OTP,
+and stores only its BCrypt hash with a ten-minute expiry and attempt counter.
+The response is the same for unknown accounts and mismatched contacts.
+
+After the transaction commits, `RecoveryDelivery` sends through SMTP or Twilio
+on a bounded background executor. It never logs the OTP or recipient. When the
+user submits the OTP and a new password, row locks enforce one successful use;
+five incorrect attempts lock the request. The service rechecks account activity,
+contact, and password fingerprint before saving the new BCrypt password hash.
+The browser returns to login; it does not receive an authenticated session.
+
+Provider settings are supplied through the root `.env` for Docker. Without them,
+the corresponding delivery channel stays disabled in the UI. The backend applies
+the additive `db/password-reset.sql` startup script for existing databases.
+
 POST means “process this submitted data.” It does not always mean insert a database row. Login processes credentials and creates session state.
 
 ## 2. First manager setup

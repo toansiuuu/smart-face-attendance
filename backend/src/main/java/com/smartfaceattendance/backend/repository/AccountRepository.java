@@ -6,6 +6,9 @@ import java.util.*;
 import org.springframework.data.jpa.repository.*;
 
 public interface AccountRepository extends JpaRepository<Account, Long> {
+  @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+  @Query("select a from Account a where a.id = :id")
+  Optional<Account> lockById(Long id);
   Optional<Account> findByUsername(String username);
 
   Optional<Account> findByEmployeeId(Long id);

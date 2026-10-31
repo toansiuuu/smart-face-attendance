@@ -28,7 +28,9 @@ public class SecurityConfig {
             x ->
                 x.requestMatchers(HttpMethod.POST, "/api/diem-danh")
                     .permitAll()
-                    .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/health", "/error")
+                    .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/password-recovery/options", "/api/health", "/error")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/password-recovery/request", "/api/auth/password-recovery/reset")
                     .permitAll()
                     .requestMatchers("/uploads/**")
                     .permitAll()

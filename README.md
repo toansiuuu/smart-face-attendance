@@ -6,7 +6,7 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Spring Boot 3.5, Java 21, Maven |
+| Backend | Spring Boot 3.5, Java 17, Maven |
 | Frontend | React 19, Vite 8, TailwindCSS 4, React Router 7 |
 | Database | MySQL 8 (Docker) |
 | Auth | Session-based + CSRF (BCrypt password encoding) |
@@ -114,6 +114,64 @@ secrets and URLs. In a separate terminal, run `npm install` and `npm run dev`
 inside `frontend`. Stop foreground development servers with `Ctrl+C` in their
 respective terminals; stop MySQL with `docker compose stop mysql`.
 
+## Quên mật khẩu qua email hoặc SMS
+
+Trang đăng nhập có nút **Quên mật khẩu?**. Người dùng nhập tài khoản/mã nhân viên,
+chọn email hoặc SMS và nhập thông tin liên hệ đã đăng ký. Hệ thống gửi mã OTP
+6 chữ số để người dùng **đặt mật khẩu mới**, không gửi lại mật khẩu cũ.
+
+### Cấu hình gửi tin (quản trị viên)
+
+Trong Command Prompt tại thư mục dự án:
+
+```cmd
+if not exist .env copy .env.example .env
+notepad .env
+```
+
+Điền cấu hình của nhà cung cấp vào `.env`:
+
+- **Email SMTP:** `MAIL_HOST`, `MAIL_PORT` (mặc định `587`), `MAIL_USERNAME`,
+  `MAIL_PASSWORD`, `MAIL_FROM`. Mặc định dùng xác thực và STARTTLS
+  (`MAIL_AUTH=true`, `MAIL_STARTTLS=true`). Dùng mật khẩu ứng dụng hoặc thông tin
+  SMTP do nhà cung cấp cấp; không dùng thông tin mẫu làm thông tin thật.
+- **SMS Twilio:** `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_FROM_NUMBER` (số gửi có hỗ trợ SMS, định dạng quốc tế như `+1...`).
+  Cấu hình quyền gửi tới quốc gia/số nhận trong tài khoản Twilio.
+- **Tài khoản `admin` ban đầu không gắn hồ sơ nhân viên:** đặt
+  `RECOVERY_ADMIN_EMAIL` và/hoặc `RECOVERY_ADMIN_PHONE`. Nếu đổi tên tài khoản
+  quản trị, cập nhật `RECOVERY_ADMIN_USERNAME` cho khớp.
+
+Sau khi lưu cấu hình, chạy lại `run-all.bat`. Docker Compose đọc `.env` và đưa
+cấu hình vào backend. Không cần sửa mã nguồn. `.env` đã được Git bỏ qua;
+không đưa mật khẩu SMTP hay token Twilio lên GitHub.
+
+Chỉ kênh đã cấu hình đầy đủ mới được bật trong giao diện. Khi chưa cấu hình cả
+hai kênh, giao diện thông báo cần liên hệ quản trị viên. Thông tin cấu hình hợp
+lệ vẫn cần được kiểm tra với nhà cung cấp thực tế; dự án không giả lập gửi tin.
+
+### Điều kiện để nhận mã
+
+- Email/SĐT phải khớp thông tin đã lưu trong hồ sơ nhân viên và tài khoản còn
+  hoạt động. Nhập email/SĐT khi tạo nhân viên; hồ sơ hiện có có thể cập nhật
+  qua API quản lý `PATCH /api/employees/{id}` bằng tài khoản quản lý.
+- Số điện thoại Việt Nam dạng `09...` được chuẩn hóa thành `+849...` khi gửi SMS.
+  `RECOVERY_PHONE_COUNTRY_CODE` mặc định là `84`.
+- Mã hết hạn sau 10 phút, chỉ dùng một lần, tối đa 5 lần nhập sai. Chờ ít nhất
+  60 giây để yêu cầu mã tiếp theo; tối đa 3 yêu cầu/tài khoản trong 15 phút
+  và 10 yêu cầu/IP trong một giờ.
+- Câu trả lời công khai không tiết lộ tài khoản/email/SĐT có tồn tại hay không.
+  Nếu chưa nhận email, kiểm tra thư rác và thông tin đã đăng ký.
+- Đặt mật khẩu mới thành công sẽ làm các phiên đăng nhập cũ mất hiệu lực.
+
+Backend tự chạy SQL `CREATE TABLE IF NOT EXISTS` chỉ để bổ sung bảng
+`password_reset_requests` khi khởi động, kể cả với volume MySQL đã có dữ liệu.
+Không cần xóa database. Bản SQL cũng có trong `database/migrations/V006__password_reset.sql`.
+Các thay đổi database cũ khác vẫn cần áp dụng migration tương ứng.
+
+Tài liệu nhà cung cấp: [SMTP với Spring](https://docs.spring.io/spring-boot/reference/io/email.html),
+[Twilio SMS API](https://www.twilio.com/docs/messaging/api/message-resource).
+
 ## Project Structure
 
 ```
@@ -134,7 +192,7 @@ smart-face-attendance/
 │       ├── api.js                  API client with CSRF handling
 │       └── App.jsx                 Routes
 ├── database/
-│   ├── smart-face-attendance.sql   Schema (7 tables)
+│   ├── smart-face-attendance.sql   Schema (11 tables)
 │   └── seed.sql                    Dev admin account
 ├── docs/
 │   ├── PRD/features/               23 features, 53 user stories
@@ -147,7 +205,7 @@ smart-face-attendance/
 
 ## Database Schema
 
-7 tables, JPA `ddl-auto=validate` (schema managed by SQL, not Hibernate):
+11 tables, JPA `ddl-auto=validate` (schema managed by SQL, not Hibernate):
 
 | Table | Purpose |
 |-------|---------|
@@ -158,6 +216,10 @@ smart-face-attendance/
 | `attendance_events` | Raw scan records per employee per day |
 | `correction_requests` | Time correction workflow (submit → approve/reject) |
 | `face_enrollments` | Face enrollment records |
+| `departments` | Employee departments |
+| `holidays` | Holiday calendar |
+| `leave_requests` | Leave requests and manager review |
+| `password_reset_requests` | Hashed, expiring, one-use recovery codes and rate-limit records |
 
 **Business model:** 4 milestones per day — MORNING_IN → LUNCH_OUT → AFTERNOON_IN → WORK_OUT
 

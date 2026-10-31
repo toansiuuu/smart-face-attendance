@@ -10,7 +10,7 @@ export async function api(path, options = {}) {
   const response = await fetch(base+path, {...options, credentials:'include', headers:{'Content-Type':'application/json', ...(csrf?{[csrf.headerName]:csrf.token}:{}), ...options.headers}, body:options.body === undefined ? undefined : JSON.stringify(options.body)});
   const data = await response.json().catch(()=>({}));
   if (!response.ok) {if(response.status===403)csrf=null; const error=new Error(data.message || `HTTP ${response.status}`); error.status=response.status; throw error;}
-  if(['/auth/login','/auth/logout','/auth/password'].includes(path))csrf=null;
+  if(['/auth/login','/auth/logout','/auth/password','/auth/password-recovery/reset'].includes(path))csrf=null;
   return data;
 }
 export async function allPages(path) {

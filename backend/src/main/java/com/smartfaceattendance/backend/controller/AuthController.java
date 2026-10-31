@@ -47,7 +47,8 @@ public class AuthController {
       throw new ApiException(401, "Invalid username or password");
     var authentication =
         UsernamePasswordAuthenticationToken.authenticated(
-            a.username, null, List.of(new SimpleGrantedAuthority("ROLE_" + a.role)));
+            new AccountPrincipal(a.username, AccountPrincipal.fingerprint(a.passwordHash)),
+            null, List.of(new SimpleGrantedAuthority("ROLE_" + a.role)));
     var context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(authentication);
     SecurityContextHolder.setContext(context);

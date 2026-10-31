@@ -27,6 +27,11 @@ public class IdentityService {
             .findByUsername(auth.getName())
             .orElseThrow(() -> new ApiException(401, "Login required"));
     if (!a.enabled) throw new ApiException(401, "Account disabled");
+    if (!(auth.getPrincipal() instanceof AccountPrincipal principal)
+        || !principal.passwordFingerprint().equals(AccountPrincipal.fingerprint(a.passwordHash))) {
+      SecurityContextHolder.clearContext();
+      throw new ApiException(401, "Mật khẩu đã thay đổi. Vui lòng đăng nhập lại.");
+    }
     if (a.employeeId != null
         && !employees.findById(a.employeeId).map(e -> "ACTIVE".equals(e.status)).orElse(false))
       throw new ApiException(403, "Employee inactive");

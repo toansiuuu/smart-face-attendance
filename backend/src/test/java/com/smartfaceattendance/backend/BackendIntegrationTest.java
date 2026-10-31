@@ -31,6 +31,8 @@ import org.springframework.test.web.servlet.MockMvc;
       "spring.jpa.hibernate.ddl-auto=none",
       "spring.sql.init.mode=always",
       "spring.sql.init.schema-locations=classpath:schema-test.sql",
+      "app.liveness-url=",
+      "app.liveness-secret=",
       "app.working-days=MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY,SUNDAY"
     })
 @AutoConfigureMockMvc
@@ -323,6 +325,23 @@ class BackendIntegrationTest {
                 .content("{\"anhKhuonMat\":\"data:image/jpeg;base64,/9j/2Q==\"}"))
         .andExpect(status().isServiceUnavailable());
     assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM attendance_events", Integer.class));
+  }
+
+  @Test
+  void standaloneLivenessRequiresManagerAndCsrfAndWritesNothing() throws Exception {
+    employee("LIVENESS");
+    var body = "{\"image\":\"data:image/jpeg;base64,/9j/2Q==\"}";
+    mvc.perform(post("/api/face/liveness").with(csrf())
+        .contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+    mvc.perform(post("/api/face/liveness").session(login("LIVENESS")).with(csrf())
+        .contentType("application/json").content(body)).andExpect(status().isForbidden());
+    var managerSession = login("admin");
+    mvc.perform(post("/api/face/liveness").session(managerSession)
+        .contentType("application/json").content(body)).andExpect(status().isForbidden());
+    mvc.perform(post("/api/face/liveness").session(managerSession).with(csrf())
+        .contentType("application/json").content(body)).andExpect(status().isServiceUnavailable());
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM attendance_events", Integer.class));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM face_enrollments", Integer.class));
   }
 
   @Test

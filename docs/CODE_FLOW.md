@@ -28,7 +28,9 @@ A database connection failure occurs before this runner can create anything. Fix
 
 ## 4. Face attendance
 
-`FaceCapture.jsx` captures a JPEG → `/diem-danh` → `FaceAttendanceController.scan` accepts the public scan (CSRF protected) → `FaceService.scan` calls `RecognitionClient` → active external reference identifies employee → `AttendanceService.record` locks the employee row, selects schedule and scan window, checks duplicates/order, then inserts `attendance_events`.
+`FaceCapture.jsx` captures a JPEG → `/diem-danh` → `FaceAttendanceController.scan` accepts the public scan (CSRF protected) → `FaceService.scan` requires `LivenessClient` to accept the image → `RecognitionClient` identifies the face → active external reference identifies employee → `AttendanceService.record` locks the employee row, selects schedule and scan window, checks duplicates/order, then inserts `attendance_events`.
+
+The Python face service lives in `deploy/service.py`; `deploy/identity.py` adds OpenCV SFace identity extraction, persistent enrollment, and matching. The supplied detector and anti-spoofing ONNX models remain required for liveness. The manager-only `/api/face/liveness` endpoint allows standalone testing from `FaceEnrollmentDialog.jsx`; it writes nothing. Enrollment requires liveness before storing the employee embedding. The full launcher configures both Java clients automatically. See `deploy/README.md` for configuration.
 
 The browser never chooses the employee id or official attendance timestamp. A face-service failure ends this flow with an error and no attendance write.
 

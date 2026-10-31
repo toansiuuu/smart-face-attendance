@@ -1,4 +1,23 @@
 services:
+  liveness:
+    profiles: ["face"]
+    build: ./deploy
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      LIVENESS_SECRET: ${LIVENESS_SECRET:-}
+      LIVENESS_THRESHOLD: ${LIVENESS_THRESHOLD:-0.5}
+      IDENTITY_THRESHOLD: ${IDENTITY_THRESHOLD:-0.5}
+      IDENTITY_MARGIN: ${IDENTITY_MARGIN:-0.05}
+      IDENTITY_DB: /data/identity.sqlite3
+    volumes:
+      - face_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
   mysql:
     image: mysql:8.0
     container_name: sfa-mysql
@@ -14,4 +33,5 @@ services:
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
 
 volumes:
+  face_data:
   mysql_data:

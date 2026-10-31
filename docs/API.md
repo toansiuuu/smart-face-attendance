@@ -47,7 +47,28 @@ Attendance rows include `date`, employee details, `timeIn`, `timeOut`, `status`,
 
 Errors normally return `{message:...}`. 400 invalid input; 401 missing/expired session or invalid login; 403 role/CSRF; 404 missing resource; 409 conflict; 422 unaccepted face; 502/503 unavailable or invalid recognition provider. Password hashes are never returned.
 
-## External recognition provider — integration still required
+## Liveness service — supplied ONNX models
+
+Set `LIVENESS_URL` (default `http://localhost:8001`) and `LIVENESS_SECRET` on
+the backend. Run the Python service with the same `LIVENESS_SECRET`; see
+[deploy setup](../deploy/README.md). Both attendance scanning and enrollment
+require successful liveness on the submitted image before identity matching.
+Missing configuration, service outages, invalid responses, or spoof decisions
+never fall back to successful enrollment/attendance.
+
+`POST /api/face/liveness` is MANAGER-only and CSRF-protected. Body:
+`{"image":"data:image/jpeg;base64,..."}`. It returns `accepted`, `isReal`,
+`status`, and `modelVersion` without database writes. The enrollment dialog uses
+this endpoint for **Kiểm tra người thật**. A successful liveness test alone
+does not identify an employee or enroll their face.
+
+## Identity recognition provider
+
+The full Docker launcher now configures the included Python SFace provider at
+`http://liveness:8001`. It implements both endpoints below and persists embeddings
+in the `face_data` volume. Standalone Java development can set `RECOGNITION_URL`
+to `http://localhost:8001` and `RECOGNITION_SECRET` to the Python `LIVENESS_SECRET`.
+No additional identity service is needed when using the full launcher.
 
 Set backend environment variables `RECOGNITION_URL` and `RECOGNITION_SECRET`. Backend calls use `Authorization: Bearer <service-secret>` **only between backend and recognition provider**. Keep this secret out of frontend configuration.
 
@@ -69,7 +90,7 @@ Both success responses must be HTTP 200:
 {"accepted":true,"externalRef":"provider-person-unique-reference","modelVersion":"your-model-version"}
 ```
 
-`externalRef` must be stable, unique and ≤120 characters. `modelVersion` is optional and ≤80. Re-enrollment should be idempotent for the same employee id. The provider must own match threshold, liveness/spoof checking and biometric storage policy; this adapter does not implement them. An unaccepted face can return `{accepted:false}`.
+`externalRef` must be stable, unique and ≤120 characters. `modelVersion` is optional and ≤80. Re-enrollment should be idempotent for the same employee id. The identity provider must own match threshold and biometric storage policy. The separate supplied Python service performs liveness before these calls. An unaccepted face can return `{accepted:false}`.
 
 The backend checks the reference against an active `face_enrollments` row and checks employee activity again while recording. It limits decoded JPEG data to 2,000,000 bytes and checks encoding/signature; the provider must fully decode and validate images. Connect timeout 5 seconds; request timeout 15 seconds.
 

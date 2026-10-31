@@ -11,7 +11,8 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 | Database | MySQL 8 (Docker) |
 | Auth | Session-based + CSRF (BCrypt password encoding) |
 | Export | Client-side Excel via ExcelJS |
-| Face Recognition | External service — **not implemented yet** |
+| Face Liveness | Python API using supplied ONNX detector and anti-spoofing model in `deploy/` |
+| Face Identity Recognition | OpenCV SFace with a persistent embedding gallery in the Python face service |
 
 ## Prerequisites
 
@@ -20,6 +21,40 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 - Docker Desktop
 
 ## Quick Start
+
+### Start everything with Bash (Docker)
+
+On **Windows Command Prompt**, use the native launcher instead:
+
+```cmd
+cd /d D:\3monthslearnOOPSQL\smart-face-attendance-main
+run-all.bat
+```
+
+It starts Docker Desktop if necessary, then builds and starts all four services.
+Finish any first-run setup shown by Docker Desktop if the launcher reports that
+the engine is not ready.
+
+Start Docker Desktop, then run from the project root in **Git Bash** on Windows
+or Bash on Linux/macOS:
+
+```bash
+bash run-all.sh
+```
+
+This builds and starts MySQL, Python liveness, Java backend, and React frontend.
+It generates a shared service secret and waits for the app to respond. Open
+http://localhost:5173/login. The first build downloads dependencies and can take
+several minutes. Existing database volumes are preserved; older schemas may need
+the SQL migrations. The launcher configures identity matching and liveness automatically.
+
+To stop the services while preserving data:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face stop
+```
+
+### Run services locally
 
 ```bash
 # 1. Clone
@@ -130,7 +165,8 @@ smart-face-attendance/
 - **Frontend:** port `5173` (Vite dev server)
 - **Timezone:** `Asia/Ho_Chi_Minh` throughout (DB, backend, business logic)
 - **Password policy:** minimum 12 characters, max 72 UTF-8 bytes
-- **Face recognition:** `RecognitionClient.java` is a placeholder — the external service does not exist yet
+- **Face liveness:** see [deploy/README.md](deploy/README.md) for Python/Docker setup. Enrollment and scans require liveness before identity matching. Managers can use **Kiểm tra người thật** in the enrollment dialog to test the model without saving data.
+- **Face identity recognition:** the Python service uses the added OpenCV SFace model. Enroll an employee using the manager dashboard before scanning attendance. Embeddings persist in the `face_data` Docker volume; raw face images are not stored. See [deploy/README.md](deploy/README.md).
 - **DB re-init:** `docker compose down -v && docker compose up -d` (destroys data)
 
 ### Environment Variables (all optional, with defaults)
@@ -145,6 +181,8 @@ smart-face-attendance/
 | `GRACE_MINUTES` | `0` | Late grace period |
 | `RECOGNITION_URL` | *(empty)* | Face recognition service URL |
 | `RECOGNITION_SECRET` | *(empty)* | Face recognition API secret |
+| `LIVENESS_URL` | `http://localhost:8001` | Supplied Python liveness API |
+| `LIVENESS_SECRET` | *(empty)* | Shared backend/Python secret; required for face operations |
 
 ## Git Conventions
 

@@ -5,6 +5,7 @@ import com.smartfaceattendance.backend.dto.request.FaceRequest;
 import com.smartfaceattendance.backend.repository.EmployeeRepository;
 import com.smartfaceattendance.backend.service.FaceService;
 import com.smartfaceattendance.backend.service.IdentityService;
+import com.smartfaceattendance.backend.integration.LivenessClient;
 import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.web.bind.annotation.*;
@@ -15,12 +16,20 @@ public class FaceAttendanceController {
   private final IdentityService identity;
   private final EmployeeRepository employees;
   private final FaceService faces;
+  private final LivenessClient liveness;
 
   public FaceAttendanceController(
-      IdentityService identity, EmployeeRepository employees, FaceService faces) {
+      IdentityService identity, EmployeeRepository employees, FaceService faces, LivenessClient liveness) {
     this.identity = identity;
     this.employees = employees;
     this.faces = faces;
+    this.liveness = liveness;
+  }
+
+  @PostMapping("/face/liveness")
+  public Object liveness(@Valid @RequestBody EnrollmentRequest request) {
+    identity.manager();
+    return liveness.check(request.image());
   }
 
   // No account login is needed to submit a camera scan. Identity comes from recognition.

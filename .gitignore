@@ -18,3 +18,9 @@ backend/uploads/
 
 # Env
 *.env
+.env
+**/.venv/
+**/__pycache__/
+*.pyc
+deploy/data/
+deploy/*.log

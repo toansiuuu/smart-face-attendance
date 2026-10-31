@@ -32,7 +32,7 @@ public class RecognitionClient {
   public Map<String, String> call(String path, String image, Long employeeId) {
     if (!configured())
       throw new ApiException(
-          503, "Recognition service is not configured. No attendance was recorded.");
+          503, "Employee identity matching is not configured. Liveness alone cannot enroll or record attendance.");
     if (!image.startsWith("data:image/jpeg;base64,"))
       throw new ApiException(400, "A JPEG data URL is required");
     try {
@@ -56,9 +56,13 @@ public class RecognitionClient {
               .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
               .build();
       var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-      if (response.statusCode() != 200)
-        throw new ApiException(502, "Recognition service rejected the request");
       var json = mapper.readTree(response.body());
+      if (response.statusCode() != 200) {
+        int status = response.statusCode();
+        if (status == 400 || status == 409 || status == 413 || status == 422)
+          throw new ApiException(status, json.path("detail").asText("Face recognition rejected the image"));
+        throw new ApiException(503, "Face recognition service unavailable or misconfigured");
+      }
       if (!json.path("accepted").asBoolean(false) || json.path("externalRef").asText().isBlank())
         throw new ApiException(422, "No accepted face match/enrollment");
       String ref = json.path("externalRef").asText(),

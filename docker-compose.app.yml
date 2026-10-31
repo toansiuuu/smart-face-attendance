@@ -1,0 +1,51 @@
+# Additional services used by run-all.sh; existing local development is unchanged.
+services:
+  mysql:
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h 127.0.0.1 -uroot -e 'SELECT 1' smart_face_attendance >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/smart_face_attendance?connectionTimeZone=%2B07:00&forceConnectionTimeZoneToSession=true
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      LIVENESS_URL: http://liveness:8001
+      LIVENESS_SECRET: ${LIVENESS_SECRET:-}
+      RECOGNITION_URL: http://liveness:8001
+      RECOGNITION_SECRET: ${LIVENESS_SECRET:-}
+      WORKING_DAYS: ${WORKING_DAYS:-}
+      GRACE_MINUTES: ${GRACE_MINUTES:-0}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - app_uploads:/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      liveness:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      API_PROXY_TARGET: http://backend:8081
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "Promise.all(['http://localhost:5173','http://backend:8081/api/health'].map(async u=>{const r=await fetch(u);if(!r.ok)throw Error(r.status)})).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+volumes:
+  app_uploads:

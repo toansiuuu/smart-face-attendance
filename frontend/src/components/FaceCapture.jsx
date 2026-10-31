@@ -49,10 +49,11 @@ const FaceCapture = () => {
     
     if (video && canvas && video.videoWidth > 0) {
       const context = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const scale = Math.min(1, 1280 / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64Image = canvas.toDataURL('image/jpeg');
+      const base64Image = canvas.toDataURL('image/jpeg', 0.85);
       
       setIsLoading(true);
       try {

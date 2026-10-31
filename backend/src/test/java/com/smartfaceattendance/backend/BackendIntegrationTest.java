@@ -277,7 +277,7 @@ class BackendIntegrationTest {
   void enrollmentRemainsManagerOnly() throws Exception {
     Long id = employee("ONE");
     String path = "/api/employees/" + id + "/face-enrollment";
-    String body = "{\"image\":\"data:image/jpeg;base64,/9j/2Q==\"}";
+    String body = "{\"challengeId\":\"test-enrollment-challenge-token\"}";
     mvc.perform(post(path).with(csrf()).contentType("application/json").content(body))
         .andExpect(status().isUnauthorized());
     mvc.perform(
@@ -287,6 +287,12 @@ class BackendIntegrationTest {
                 .contentType("application/json")
                 .content(body))
         .andExpect(status().isForbidden());
+    mvc.perform(post(path + "/challenge").with(csrf())).andExpect(status().isUnauthorized());
+    mvc.perform(post(path + "/challenge").session(login("ONE")).with(csrf()))
+        .andExpect(status().isForbidden());
+    mvc.perform(post(path).session(login("admin")).with(csrf()).contentType("application/json")
+        .content("{\"image\":\"data:image/jpeg;base64,/9j/2Q==\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

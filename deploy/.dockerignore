@@ -2,6 +2,7 @@
 !requirements.txt
 !service.py
 !identity.py
+!enrollment.py
 !src/
 !src/detection/
 !src/inference/

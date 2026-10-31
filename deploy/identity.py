@@ -39,6 +39,9 @@ class IdentityEngine:
         return sqlite3.connect(self.database, timeout=15)
 
     def embedding(self, rgb):
+        return self.analyze(rgb)[0]
+
+    def analyze(self, rgb):
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         height, width = bgr.shape[:2]
         with self.lock:
@@ -51,7 +54,21 @@ class IdentityEngine:
                 raise HTTPException(422, "Move your face into the frame and closer to the camera")
             aligned = self.recognizer.alignCrop(bgr, faces[0])
             feature = self.recognizer.feature(aligned).reshape(-1).copy()
-        return self.normalize(feature)
+            turn = self.turn_ratio(faces[0])
+        return self.normalize(feature), turn
+
+    @staticmethod
+    def turn_ratio(face):
+        eye1, eye2, nose = face[4:6], face[6:8], face[8:10]
+        eye_axis = eye2 - eye1
+        eye_distance = float(np.linalg.norm(eye_axis))
+        if eye_distance < 15:
+            raise HTTPException(422, "Move closer so both eyes are visible")
+        # Signed nose displacement along the eye line; independent of translation/scale/roll.
+        axis = eye_axis / eye_distance
+        if axis[0] < 0:
+            axis = -axis
+        return float(np.dot(nose - (eye1 + eye2) / 2, axis) / eye_distance)
 
     @staticmethod
     def normalize(feature):
@@ -73,6 +90,10 @@ class IdentityEngine:
 
     def enroll(self, employee, rgb):
         feature = self.embedding(rgb)
+        return self.enroll_feature(employee, feature)
+
+    def enroll_feature(self, employee, feature):
+        feature = self.normalize(feature)
         reference = f"employee-{employee}"
         with self.connect() as db:
             # Serialize duplicate checks and writes, including requests for different employees.

@@ -7,10 +7,11 @@ builds and configures the full application automatically.
 ## Enroll and scan
 
 1. Log in as a manager and open an employee's face-enrollment dialog.
-2. Capture a clear, front-facing photo with exactly one face.
-3. Optionally use **Kiểm tra người thật** to test liveness without saving.
-4. Click **Lưu khuôn mặt** to enroll. Both liveness and identity extraction must
-   succeed before the employee is marked enrolled.
+2. Click **Bắt đầu kiểm tra** with exactly one face in view.
+3. Look straight, turn gently in the requested left/right order, then look
+   straight again. The order of the two turns is randomized by the server.
+4. After all four steps pass, click **Lưu khuôn mặt**. Single-photo enrollment
+   is rejected, including direct API calls that skip the challenge.
 5. Open the camera kiosk at `/` to scan. The backend identifies an enrolled face,
    verifies the employee is active, and applies schedule/duplicate/order rules.
 
@@ -29,8 +30,28 @@ container rebuilds and restarts. Preserve this volume together with MySQL;
 
 A model-version mismatch stops startup rather than comparing incompatible
 embeddings. Changing identity models requires a deliberate migration/re-enrollment.
-A remote enrollment and MySQL save are not one distributed transaction; retries
-are idempotent for the same employee if a later database save fails.
+A remote enrollment and MySQL save are not one distributed transaction. A fresh
+challenge can update the same stable employee reference if a later save fails.
+
+## Active head-turn check
+
+`/enrollment/start` creates an employee-bound, 120-second challenge. Each pose
+needs two different camera frames at least 350 ms apart. Every accepted frame
+must pass the original anti-spoofing model and match the initial SFace identity.
+The five YuNet landmarks supply a normalized nose-to-eye-line displacement;
+the initial straight pose calibrates the center. Moving the whole face or
+rolling the camera does not by itself count as a turn. The two opposite turns
+must exceed the calibrated center by 0.18 eye distances, followed by a return
+within 0.10. These are pose heuristics, not measured rotation angles.
+
+Completed challenges can enroll only their employee and are consumed on save.
+Restarting the service discards in-progress challenges; persisted enrollments
+remain intact. If MySQL saving fails after the face service consumed the token,
+perform a fresh challenge to retry enrollment.
+
+This adds a movement check to the image anti-spoofing model. It is not certified
+presentation-attack detection and does not guarantee rejection of sophisticated
+video replay or generated faces. Validate with your actual camera and attacks.
 
 ## Configuration
 
@@ -80,12 +101,17 @@ Every POST requires `Authorization: Bearer <LIVENESS_SECRET>`.
 
 - `POST /liveness`: `{"image":"data:image/jpeg;base64,..."}` returns `accepted`,
   `isReal`, `status`, `logitDiff`, and `modelVersion`; writes nothing.
-- `POST /enroll`: `{"employeeId":1,"image":"data:image/jpeg;base64,..."}`
-  performs liveness and enrollment; returns `accepted`, `externalRef`, `modelVersion`.
+- `POST /enrollment/start`: `{"employeeId":1}` returns `challengeId`, the current
+  `pose`, `step`, `totalSteps`, `complete`, and optional guidance in `message`.
+- `POST /enrollment/frame`: `{"employeeId":1,"challengeId":"...","image":"data:image/jpeg;base64,..."}`
+  checks liveness, consistent identity, and requested pose; returns progress.
+- `POST /enroll`: `{"employeeId":1,"challengeId":"..."}` consumes a completed
+  challenge and returns `accepted`, `externalRef`, and `modelVersion`.
 - `POST /recognize`: `{"image":"data:image/jpeg;base64,..."}` performs liveness
   and identity matching; returns the same stable reference for a recognized face.
 - `GET /health`: reports `identityAvailable=true` and `capability=liveness-and-identity`.
 
+Invalid or expired challenges return 410; incomplete challenges return 409.
 No face/unknown/ambiguous/spoof errors return 422, duplicate enrollment returns
 409, malformed JPEGs return 400, oversized requests return 413, and inference or
 storage failures return 503. JPEGs are limited to 2 MB and 12 million pixels.
@@ -97,7 +123,7 @@ manager-only enrollment, CSRF, active-employee checks, and official server timin
 
 ```powershell
 cd deploy
-.venv/Scripts/python.exe -m unittest -v test_service test_identity
+.venv/Scripts/python.exe -m unittest -v test_service test_identity test_enrollment
 ```
 
 Tests cover actual ONNX inference, actual SFace feature extraction, gallery

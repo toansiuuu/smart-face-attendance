@@ -58,11 +58,25 @@ never fall back to successful enrollment/attendance.
 
 `POST /api/face/liveness` is MANAGER-only and CSRF-protected. Body:
 `{"image":"data:image/jpeg;base64,..."}`. It returns `accepted`, `isReal`,
-`status`, and `modelVersion` without database writes. The enrollment dialog uses
-this endpoint for **Kiểm tra người thật**. A successful liveness test alone
+`status`, and `modelVersion` without database writes. This remains available for
+manager diagnostics; guided enrollment uses the challenge endpoints below. A successful liveness test alone
 does not identify an employee or enroll their face.
 
 ## Identity recognition provider
+
+Enrollment now requires an active head-turn challenge. Manager-only, CSRF-protected
+Java endpoints are:
+
+- `POST /api/employees/{id}/face-enrollment/challenge`: start a random-order
+  straight/left/right/straight sequence.
+- `POST /api/employees/{id}/face-enrollment/challenge/{challengeId}` with an
+  `image` JPEG data URL: validate a frame and return the current step/pose.
+- `POST /api/employees/{id}/face-enrollment` with `{"challengeId":"..."}`:
+  save only after the challenge is complete. A single-image body is rejected.
+
+Challenge tokens expire after 120 seconds, are bound to one employee, and are
+consumed after enrollment. The Python service checks liveness and the same
+identity on every accepted frame. See `deploy/README.md` for limits and details.
 
 The full Docker launcher now configures the included Python SFace provider at
 `http://liveness:8001`. It implements both endpoints below and persists embeddings
@@ -75,7 +89,7 @@ Set backend environment variables `RECOGNITION_URL` and `RECOGNITION_SECRET`. Ba
 POST `{RECOGNITION_URL}/enroll`:
 
 ```json
-{"employeeId":1,"image":"data:image/jpeg;base64,..."}
+{"employeeId":1,"challengeId":"completed-server-challenge"}
 ```
 
 POST `{RECOGNITION_URL}/recognize`:

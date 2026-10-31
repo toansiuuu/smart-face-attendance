@@ -70,8 +70,22 @@ class LivenessIntegrationTest {
     employee.status = "ACTIVE";
     when(employees.lockById(1L)).thenReturn(Optional.of(employee));
     assertThrows(ApiException.class, () -> service.scan("image"));
-    assertThrows(ApiException.class, () -> service.enroll(1L, "image"));
     verifyNoInteractions(recognition, faces, attendance);
+  }
+
+  @Test void rejectedChallengeNeverWritesEnrollment() {
+    var employees = mock(EmployeeRepository.class);
+    var faces = mock(FaceEnrollmentRepository.class);
+    var recognition = mock(RecognitionClient.class);
+    var attendance = mock(AttendanceService.class);
+    var employee = new Employee();
+    employee.status = "ACTIVE";
+    when(employees.lockById(1L)).thenReturn(Optional.of(employee));
+    when(recognition.enrollChallenge(1L, "incomplete-token"))
+        .thenThrow(new ApiException(409, "Complete the head-turn challenge"));
+    var service = new FaceService(employees, faces, recognition, attendance, client);
+    assertThrows(ApiException.class, () -> service.enroll(1L, "incomplete-token"));
+    verifyNoInteractions(faces, attendance);
   }
 
   @Test void liveFaceStillRequiresIdentityService() {

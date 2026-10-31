@@ -27,11 +27,10 @@ public class FaceService {
   }
 
   @Transactional
-  public Object enroll(Long id, String image) {
+  public Object enroll(Long id, String challengeId) {
     var e = employees.lockById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
     if (!"ACTIVE".equals(e.status)) throw new ApiException(409, "Employee inactive");
-    liveness.requireLive(image);
-    var result = recognition.call("/enroll", image, id);
+    var result = recognition.enrollChallenge(id, challengeId);
     var f = faces.findByEmployeeId(id).orElseGet(FaceEnrollment::new);
     f.employeeId = id;
     f.externalRef = result.get("externalRef");
@@ -50,5 +49,11 @@ public class FaceService {
             .findByExternalRefAndActiveTrue(result.get("externalRef"))
             .orElseThrow(() -> new ApiException(422, "Face is not actively enrolled"));
     return attendance.record(face.employeeId, attendance.now(), null);
+  }
+
+  public Object challenge(Long id, String challengeId, String image) {
+    var employee = employees.findById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
+    if (!"ACTIVE".equals(employee.status)) throw new ApiException(409, "Employee inactive");
+    return recognition.challenge(id, challengeId, image);
   }
 }

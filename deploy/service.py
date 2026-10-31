@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from src.detection import load_detector, detect
 from src.inference import load_model, infer, crop, process_with_logits
 from identity import IdentityEngine
+from enrollment import EnrollmentChallenges
 
 ROOT = Path(__file__).resolve().parent
 MAX_IMAGE_BYTES = 2_000_000
@@ -32,8 +33,16 @@ class ImageRequest(BaseModel):
     image: str = Field(min_length=1, max_length=2_800_000)
 
 
-class EnrollmentRequest(ImageRequest):
+class EmployeeRequest(BaseModel):
     employeeId: int = Field(gt=0, strict=True)
+
+
+class EnrollmentRequest(EmployeeRequest):
+    challengeId: str = Field(min_length=20, max_length=64)
+
+
+class ChallengeFrameRequest(EnrollmentRequest, ImageRequest):
+    pass
 
 
 class BodyLimit:
@@ -129,6 +138,7 @@ def create_app(engine_factory=LivenessEngine, secret=None, identity_factory=None
             raise RuntimeError("Set LIVENESS_SECRET before starting the service")
         app.state.engine = engine_factory()
         app.state.identity = identity_factory() if identity_factory else None
+        app.state.challenges = EnrollmentChallenges(app.state.engine, app.state.identity)
         yield
 
     app = FastAPI(title="Smart Face Attendance Face Service", lifespan=lifespan)
@@ -158,7 +168,7 @@ def create_app(engine_factory=LivenessEngine, secret=None, identity_factory=None
             logging.exception("Liveness inference failed")
             raise HTTPException(503, "Liveness inference failed") from None
 
-    def identify(body, request, authorization, employee=None):
+    def identify(body, request, authorization):
         authorize(request, authorization)
         engine = request.app.state.identity
         if engine is None:
@@ -167,16 +177,30 @@ def create_app(engine_factory=LivenessEngine, secret=None, identity_factory=None
         try:
             if not request.app.state.engine.check(rgb)["accepted"]:
                 raise HTTPException(422, "Liveness check failed. Look directly at the camera and try again")
-            return engine.enroll(employee, rgb) if employee is not None else engine.recognize(rgb)
+            return engine.recognize(rgb)
         except HTTPException:
             raise
         except Exception:
             logging.exception("Identity operation failed")
             raise HTTPException(503, "Identity service unavailable") from None
 
+    def challenges(request, authorization):
+        authorize(request, authorization)
+        if request.app.state.identity is None:
+            raise HTTPException(503, "Identity matching is not configured")
+        return request.app.state.challenges
+
+    @app.post("/enrollment/start")
+    def start_enrollment(body: EmployeeRequest, request: Request, authorization: str = Header(default="")):
+        return challenges(request, authorization).start(body.employeeId)
+
+    @app.post("/enrollment/frame")
+    def enrollment_frame(body: ChallengeFrameRequest, request: Request, authorization: str = Header(default="")):
+        return challenges(request, authorization).frame(body.challengeId, body.employeeId, decode_image(body.image))
+
     @app.post("/enroll")
     def enroll(body: EnrollmentRequest, request: Request, authorization: str = Header(default="")):
-        return identify(body, request, authorization, body.employeeId)
+        return challenges(request, authorization).finish(body.challengeId, body.employeeId)
 
     @app.post("/recognize")
     def recognize(body: ImageRequest, request: Request, authorization: str = Header(default="")):

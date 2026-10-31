@@ -1,6 +1,7 @@
 package com.smartfaceattendance.backend.controller;
 
 import com.smartfaceattendance.backend.dto.request.EnrollmentRequest;
+import com.smartfaceattendance.backend.dto.request.ChallengeEnrollmentRequest;
 import com.smartfaceattendance.backend.dto.request.FaceRequest;
 import com.smartfaceattendance.backend.repository.EmployeeRepository;
 import com.smartfaceattendance.backend.service.FaceService;
@@ -48,8 +49,23 @@ public class FaceAttendanceController {
   }
 
   @PostMapping("/employees/{id}/face-enrollment")
-  public Object enroll(@PathVariable Long id, @Valid @RequestBody EnrollmentRequest request) {
+  public Object enroll(@PathVariable Long id, @Valid @RequestBody ChallengeEnrollmentRequest request) {
     identity.manager();
-    return faces.enroll(id, request.image());
+    return faces.enroll(id, request.challengeId());
+  }
+
+  @PostMapping("/employees/{id}/face-enrollment/challenge")
+  public Object startChallenge(@PathVariable Long id) {
+    identity.manager();
+    return faces.challenge(id, null, null);
+  }
+
+  @PostMapping("/employees/{id}/face-enrollment/challenge/{challengeId}")
+  public Object challengeFrame(@PathVariable Long id, @PathVariable String challengeId,
+      @Valid @RequestBody EnrollmentRequest request) {
+    identity.manager();
+    if (challengeId.length() < 20 || challengeId.length() > 64)
+      throw new com.smartfaceattendance.backend.exception.ApiException(400, "Invalid enrollment challenge");
+    return faces.challenge(id, challengeId, request.image());
   }
 }

@@ -36,9 +36,11 @@ class RecognitionClientTest {
   @AfterEach void stop() { server.stop(0); }
 
   @Test void enrollmentAndRecognitionUseSameStableReference() throws Exception {
-    assertEquals("employee-3", client.call("/enroll", image, 3L).get("externalRef"));
+    assertEquals("employee-3", client.enrollChallenge(3L, "completed-enrollment-challenge").get("externalRef"));
     assertEquals("/enroll", requestPath);
     assertEquals(3L, new ObjectMapper().readTree(requestBody).path("employeeId").asLong());
+    assertEquals("completed-enrollment-challenge", new ObjectMapper().readTree(requestBody).path("challengeId").asText());
+    assertFalse(new ObjectMapper().readTree(requestBody).has("image"));
     assertEquals("Bearer service-test", authorization);
     assertEquals("employee-3", client.call("/recognize", image, null).get("externalRef"));
     assertEquals("/recognize", requestPath);

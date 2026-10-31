@@ -165,7 +165,7 @@ smart-face-attendance/
 - **Frontend:** port `5173` (Vite dev server)
 - **Timezone:** `Asia/Ho_Chi_Minh` throughout (DB, backend, business logic)
 - **Password policy:** minimum 12 characters, max 72 UTF-8 bytes
-- **Face liveness:** see [deploy/README.md](deploy/README.md) for Python/Docker setup. Enrollment and scans require liveness before identity matching. Managers can use **Kiểm tra người thật** in the enrollment dialog to test the model without saving data.
+- **Face liveness:** see [deploy/README.md](deploy/README.md) for Python/Docker setup. Enrollment requires a guided straight/left/right/straight camera challenge with liveness and consistent identity; a single photo cannot enroll a face. Scans retain the image liveness check before identity matching.
 - **Face identity recognition:** the Python service uses the added OpenCV SFace model. Enroll an employee using the manager dashboard before scanning attendance. Embeddings persist in the `face_data` Docker volume; raw face images are not stored. See [deploy/README.md](deploy/README.md).
 - **DB re-init:** `docker compose down -v && docker compose up -d` (destroys data)
 

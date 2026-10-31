@@ -30,9 +30,16 @@ A database connection failure occurs before this runner can create anything. Fix
 
 `FaceCapture.jsx` captures a JPEG → `/diem-danh` → `FaceAttendanceController.scan` accepts the public scan (CSRF protected) → `FaceService.scan` requires `LivenessClient` to accept the image → `RecognitionClient` identifies the face → active external reference identifies employee → `AttendanceService.record` locks the employee row, selects schedule and scan window, checks duplicates/order, then inserts `attendance_events`.
 
-The Python face service lives in `deploy/service.py`; `deploy/identity.py` adds OpenCV SFace identity extraction, persistent enrollment, and matching. The supplied detector and anti-spoofing ONNX models remain required for liveness. The manager-only `/api/face/liveness` endpoint allows standalone testing from `FaceEnrollmentDialog.jsx`; it writes nothing. Enrollment requires liveness before storing the employee embedding. The full launcher configures both Java clients automatically. See `deploy/README.md` for configuration.
+The Python face service lives in `deploy/service.py`; `deploy/identity.py` adds OpenCV SFace identity extraction, persistent enrollment, and matching. The supplied detector and anti-spoofing ONNX models remain required for liveness. The manager-only `/api/face/liveness` endpoint remains available for diagnostic API calls; it writes nothing. The enrollment dialog uses the head-turn challenge in `deploy/enrollment.py` before storing the employee embedding. The full launcher configures both Java clients automatically. See `deploy/README.md` for configuration.
 
 The browser never chooses the employee id or official attendance timestamp. A face-service failure ends this flow with an error and no attendance write.
+
+Enrollment uses a separate active challenge: the manager starts an employee-bound
+challenge, React streams camera frames, and Python checks straight/opposite
+turns/return-to-center with liveness and consistent identity. After all four poses
+pass, React submits only the challenge ID. Python consumes it and saves the initial
+frontal embedding; Java then saves the active enrollment reference. Single-photo
+enrollment can no longer skip the movement check.
 
 ## 5. Correction
 

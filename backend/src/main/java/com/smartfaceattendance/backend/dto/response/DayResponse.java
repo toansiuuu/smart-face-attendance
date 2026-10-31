@@ -9,7 +9,6 @@ public record DayResponse(
     String empId,
     String name,
     String avatar,
-    String dept,
     LocalDate date,
     String timeIn,
     String timeOut,

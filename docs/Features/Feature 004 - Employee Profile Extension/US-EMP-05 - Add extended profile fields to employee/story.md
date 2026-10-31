@@ -17,4 +17,3 @@
 - AC6: Frontend enables the currently disabled fields in the employee form (remove "pending DB approval" tooltip)
 - AC7: Employee list and detail views display the new fields
 - AC8: Search (`GET /api/employees?search=`) should also match against email and phone fields
-- AC9: `department_id` FK column is also added but managed by Feature 005 (Department Management)

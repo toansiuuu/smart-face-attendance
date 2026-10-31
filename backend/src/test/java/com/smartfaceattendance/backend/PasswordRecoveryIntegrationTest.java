@@ -55,8 +55,7 @@ class PasswordRecoveryIntegrationTest {
     time.set(Instant.parse("2026-10-31T10:00:00Z"));
     when(clock.instant()).thenAnswer(invocation -> time.get());
     when(delivery.available(anyString())).thenReturn(true);
-    employeeId = employeeService.create(new EmployeeRequest("RECOVERY", "Recovery User", ORIGINAL,
-        null, "0912345678", "worker@example.test", null, null, null)).id();
+    employeeId = employeeService.create(new EmployeeRequest("RECOVERY", "Recovery User", ORIGINAL, "0912345678", "worker@example.test", null, null, null)).id();
   }
 
   JsonNode request(String username, String channel) throws Exception {
@@ -123,8 +122,7 @@ class PasswordRecoveryIntegrationTest {
   }
 
   @Test void eachEmployeeReceivesCodesOnlyAtTheirOwnStoredEmail() throws Exception {
-    employeeService.create(new EmployeeRequest("SECOND", "Second User", ORIGINAL,
-        null, "0987654321", "second@example.test", null, null, null));
+    employeeService.create(new EmployeeRequest("SECOND", "Second User", ORIGINAL, "0987654321", "second@example.test", null, null, null));
     request("RECOVERY", "EMAIL");
     code("EMAIL", "worker@example.test");
     request("SECOND", "EMAIL");
@@ -141,7 +139,7 @@ class PasswordRecoveryIntegrationTest {
         .content(mapper.writeValueAsString(Map.of("username", "admin", "password", ORIGINAL))))
         .andExpect(status().isOk()).andReturn().getRequest().getSession(false);
     for (String email : List.of("", "invalid-email")) {
-      var body = new EmployeeRequest("NEWUSER", "New User", ORIGINAL, null, null, email, null, null, null);
+      var body = new EmployeeRequest("NEWUSER", "New User", ORIGINAL, null, email, null, null, null);
       mvc.perform(post("/api/employees").session(managerSession).with(csrf()).contentType("application/json")
           .content(mapper.writeValueAsString(body))).andExpect(status().isBadRequest());
     }
@@ -150,9 +148,9 @@ class PasswordRecoveryIntegrationTest {
 
   @Test void duplicateUsernameEmailAndPhoneAreRejectedWithoutCreatingAccounts() {
     for (var body : List.of(
-        new EmployeeRequest("recovery", "Other", ORIGINAL, null, null, "other@example.test", null, null, null),
-        new EmployeeRequest("OTHER", "Other", ORIGINAL, null, null, " WORKER@EXAMPLE.TEST ", null, null, null),
-        new EmployeeRequest("OTHER", "Other", ORIGINAL, null, "0912345678", "other@example.test", null, null, null))) {
+        new EmployeeRequest("recovery", "Other", ORIGINAL, null, "other@example.test", null, null, null),
+        new EmployeeRequest("OTHER", "Other", ORIGINAL, null, " WORKER@EXAMPLE.TEST ", null, null, null),
+        new EmployeeRequest("OTHER", "Other", ORIGINAL, "0912345678", "other@example.test", null, null, null))) {
       var error = assertThrows(ApiException.class, () -> employeeService.create(body));
       assertEquals(409, error.status);
     }
@@ -160,14 +158,13 @@ class PasswordRecoveryIntegrationTest {
   }
 
   @Test void updateCannotTakeAnotherEmployeesEmailOrPhoneButCanKeepOwnContacts() {
-    Long second = employeeService.create(new EmployeeRequest("SECOND", "Second", ORIGINAL,
-        null, "0987654321", "second@example.test", null, null, null)).id();
+    Long second = employeeService.create(new EmployeeRequest("SECOND", "Second", ORIGINAL, "0987654321", "second@example.test", null, null, null)).id();
     for (var body : List.of(
-        new EmployeeUpdate("Second", "ACTIVE", null, "0987654321", "WORKER@EXAMPLE.TEST", null, null, null),
-        new EmployeeUpdate("Second", "ACTIVE", null, "0912345678", "second@example.test", null, null, null))) {
+        new EmployeeUpdate("Second", "ACTIVE", "0987654321", "WORKER@EXAMPLE.TEST", null, null, null),
+        new EmployeeUpdate("Second", "ACTIVE", "0912345678", "second@example.test", null, null, null))) {
       assertEquals(409, assertThrows(ApiException.class, () -> employeeService.update(second, body)).status);
     }
-    employeeService.update(employeeId, new EmployeeUpdate("Recovery User", "ACTIVE", null,
+    employeeService.update(employeeId, new EmployeeUpdate("Recovery User", "ACTIVE",
         "0912345678", "worker@example.test", null, null, null));
     assertEquals("second@example.test", employees.findById(second).orElseThrow().email);
   }
@@ -181,8 +178,7 @@ class PasswordRecoveryIntegrationTest {
         jobs.add(pool.submit(() -> {
           start.await();
           try {
-            employeeService.create(new EmployeeRequest(username, "Concurrent", ORIGINAL,
-                null, null, "shared@example.test", null, null, null));
+            employeeService.create(new EmployeeRequest(username, "Concurrent", ORIGINAL, null, "shared@example.test", null, null, null));
             return true;
           } catch (ApiException | org.springframework.dao.DataIntegrityViolationException e) { return false; }
         }));
@@ -202,10 +198,10 @@ class PasswordRecoveryIntegrationTest {
   }
 
   @Test void unrelatedProfileUpdatePreservesEmailAndBlankEmailIsRejected() {
-    employeeService.update(employeeId, new EmployeeUpdate("Updated User", "ACTIVE", null, null, null, null, null, null));
+    employeeService.update(employeeId, new EmployeeUpdate("Updated User", "ACTIVE", null, null, null, null, null));
     assertEquals("worker@example.test", employees.findById(employeeId).orElseThrow().email);
     assertThrows(ApiException.class, () -> employeeService.update(employeeId,
-        new EmployeeUpdate("Updated User", "ACTIVE", null, null, " ", null, null, null)));
+        new EmployeeUpdate("Updated User", "ACTIVE", null, " ", null, null, null)));
     assertEquals("worker@example.test", employees.findById(employeeId).orElseThrow().email);
   }
 

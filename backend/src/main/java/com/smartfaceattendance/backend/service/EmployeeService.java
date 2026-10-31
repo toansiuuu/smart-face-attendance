@@ -21,7 +21,6 @@ public class EmployeeService {
   private final EmployeeRepository employees;
   private final AccountRepository accounts;
   private final FaceEnrollmentRepository faces;
-  private final DepartmentRepository departments;
   private final PasswordEncoder encoder;
   private final String uploadDir;
   private final org.springframework.jdbc.core.JdbcTemplate jdbc;
@@ -30,14 +29,12 @@ public class EmployeeService {
       EmployeeRepository e,
       AccountRepository a,
       FaceEnrollmentRepository f,
-      DepartmentRepository d,
       PasswordEncoder p,
       org.springframework.jdbc.core.JdbcTemplate jdbc,
       @Value("${app.upload-dir:uploads}") String uploadDir) {
     employees = e;
     accounts = a;
     faces = f;
-    departments = d;
     encoder = p;
     this.jdbc = jdbc;
     this.uploadDir = uploadDir;
@@ -77,20 +74,11 @@ public class EmployeeService {
   }
 
   public EmployeeResponse response(Employee e) {
-    String deptName = null;
-    String deptId = null;
-    if (e.departmentId != null) {
-      var dept = departments.findById(e.departmentId);
-      deptName = dept.map(d -> d.name).orElse(null);
-      deptId = e.departmentId.toString();
-    }
     return new EmployeeResponse(
         e.id,
         e.employeeCode,
         e.fullName,
         initials(e.fullName),
-        deptName,
-        deptId,
         e.phone,
         e.email,
         e.position,
@@ -135,15 +123,9 @@ public class EmployeeService {
       throw new ApiException(409, "Tên đăng nhập / mã nhân viên đã tồn tại.");
     checkUniqueContacts(r.email(), r.phone(), -1L);
     var now = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-    if (r.departmentId() != null) {
-      departments
-          .findById(r.departmentId())
-          .orElseThrow(() -> new ApiException(404, "Department not found"));
-    }
     var e = new Employee();
     e.employeeCode = code;
     e.fullName = r.fullName().trim();
-    e.departmentId = r.departmentId();
     e.phone = r.phone() == null || r.phone().isBlank() ? null : r.phone().trim();
     e.email = r.email().trim().toLowerCase(Locale.ROOT);
     e.position = r.position();
@@ -173,12 +155,6 @@ public class EmployeeService {
     checkUniqueContacts(r.email() == null ? e.email : r.email(), r.phone(), id);
     e.fullName = r.fullName().trim();
     e.status = r.status();
-    if (r.departmentId() != null) {
-      departments
-          .findById(r.departmentId())
-          .orElseThrow(() -> new ApiException(404, "Department not found"));
-    }
-    e.departmentId = r.departmentId();
     e.phone = r.phone();
     if (r.email() != null) {
       if (r.email().isBlank()) throw new ApiException(400, "Email không được để trống.");

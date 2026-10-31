@@ -23,6 +23,6 @@ export const localDay=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi
 export const currentMonth=()=>{const [y,m]=localDay().split('-');return `${Number(m)}/${y}`;};
 export const months=()=>Array.from({length:24},(_,i)=>{const [y,m]=localDay().split('-');const d=new Date(Number(y),Number(m)-1-i,1);return `${d.getMonth()+1}/${d.getFullYear()}`;});
 export function monthRange(value){const [m,y]=value.split('/').map(Number);return {from:`${y}-${String(m).padStart(2,'0')}-01`,to:`${y}-${String(m).padStart(2,'0')}-${new Date(y,m,0).getDate()}`};}
-export const attendanceRow=r=>({...r,date:r.date.split('-').reverse().join('/'),dept:r.dept||'—'});
+export const attendanceRow=r=>({...r,date:r.date.split('-').reverse().join('/')});
 export const correctionRow=r=>({...r,dateTarget:r.dateTarget.split('-').reverse().join('/'),scanType:labels[r.eventType],submitTime:r.submitTime.replace('T',' ')});
 export async function logout(navigate){await api('/auth/logout',{method:'POST'});navigate('/login');}

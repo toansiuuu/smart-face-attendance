@@ -7,8 +7,6 @@ public record EmployeeResponse(
     String empId,
     String name,
     String avatar,
-    String dept,
-    String deptId,
     String phone,
     String email,
     String position,

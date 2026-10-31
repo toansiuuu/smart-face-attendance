@@ -16,9 +16,6 @@ public class Employee {
   @Column(name = "full_name", nullable = false, length = 150)
   public String fullName;
 
-  @Column(name = "department_id")
-  public Long departmentId;
-
   @Column(name = "phone", length = 20)
   public String phone;
 

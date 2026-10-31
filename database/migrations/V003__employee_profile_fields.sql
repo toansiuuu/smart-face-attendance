@@ -1,4 +1,4 @@
-ALTER TABLE `employees` ADD COLUMN `phone` varchar(20) DEFAULT NULL AFTER `department_id`;
+ALTER TABLE `employees` ADD COLUMN `phone` varchar(20) DEFAULT NULL AFTER `full_name`;
 ALTER TABLE `employees` ADD COLUMN `email` varchar(255) DEFAULT NULL AFTER `phone`;
 ALTER TABLE `employees` ADD COLUMN `position` varchar(100) DEFAULT NULL AFTER `email`;
 ALTER TABLE `employees` ADD COLUMN `date_of_birth` date DEFAULT NULL AFTER `position`;

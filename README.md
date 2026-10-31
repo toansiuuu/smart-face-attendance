@@ -246,9 +246,6 @@ smart-face-attendance/
 | `attendance_events` | Raw scan records per employee per day |
 | `correction_requests` | Time correction workflow (submit → approve/reject) |
 | `face_enrollments` | Face enrollment records |
-| `departments` | Employee departments |
-| `holidays` | Holiday calendar |
-| `leave_requests` | Leave requests and manager review |
 | `password_reset_requests` | Hashed, expiring, one-use recovery codes and rate-limit records |
 
 **Business model:** 4 milestones per day — MORNING_IN → LUNCH_OUT → AFTERNOON_IN → WORK_OUT
@@ -327,3 +324,5 @@ See `docs/Guideline/git-branch-strategy.md` for full details.
 Tên đăng nhập (mã nhân viên), email và số điện thoại không được trùng giữa các tài khoản. Email/tên đăng nhập được kiểm tra không phân biệt hoa thường; email được bỏ khoảng trắng đầu/cuối và lưu chữ thường. Số điện thoại có thể để trống; các số đã điền phải khác nhau. Quy tắc áp dụng cả tạo và sửa hồ sơ. Hai nhân viên vẫn có thể cùng họ tên.
 
 Backend tự thêm unique index email và số điện thoại khi khởi động với database cũ. Nếu dữ liệu cũ trùng, backend giữ nguyên hồ sơ và hoãn index tương ứng, ghi cảnh báo để admin sửa. Mọi thao tác tạo/sửa dùng khóa database chung để ngăn dữ liệu trùng mới, kể cả các yêu cầu đồng thời. Sau khi sửa các hồ sơ cũ, khởi động lại để thêm index. Khôi phục mật khẩu chỉ còn qua email; yêu cầu SMS bị từ chối.
+
+Các module Phòng ban, Nghỉ phép và Ngày lễ đã được gỡ khỏi giao diện, API và xử lý chấm công. Chấm công dùng các ngày làm việc đã cấu hình; không áp dụng ngoại lệ ngày lễ/nghỉ phép. Database cũ giữ nguyên các bảng lịch sử chưa dùng để tránh mất dữ liệu; database mới không tạo các bảng này.

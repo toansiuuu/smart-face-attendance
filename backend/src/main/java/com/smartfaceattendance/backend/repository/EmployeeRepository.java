@@ -18,7 +18,4 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
   boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
   boolean existsByPhoneAndIdNot(String phone, Long id);
 
-  long countByDepartmentId(Long departmentId);
-
-  List<Employee> findByDepartmentId(Long departmentId);
 }

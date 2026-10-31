@@ -15,7 +15,7 @@
   - Absences: ≥ 2 full-day absences in the current month
   - Missing milestones: ≥ 5 missing milestone scans in the current month
 - AC3: `GET /api/statistics/anomalies?month={yyyy-MM}` returns a list of flagged employees with their violation counts
-- AC4: Each anomaly entry shows: Employee Name, Employee Code, Department (if Feature 005 is implemented), Violation Type, Count, Last Occurrence Date
+- AC4: Each anomaly entry shows: Employee Name, Employee Code, Violation Type, Count, Last Occurrence Date
 - AC5: Sorted by severity: most violations first
 - AC6: Click on an employee row navigates to their individual attendance detail (Feature 010)
 - AC7: No automated actions (no emails or penalties) — this is an informational tool for manager awareness only

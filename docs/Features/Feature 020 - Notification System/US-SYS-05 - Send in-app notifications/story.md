@@ -13,7 +13,6 @@
 - AC2: `NotificationService.send(recipientId, type, title, message, refType, refId)` creates a notification record
 - AC3: Triggered events:
   - Correction request approved/rejected → notify the requesting employee
-  - Leave request approved/rejected → notify the requesting employee (when Feature 006 is implemented)
   - New correction request submitted → notify all managers
   - Shift configuration changed → notify all active employees
 - AC4: Notifications are created within the same transaction as the triggering action (e.g., correction review) to ensure consistency

@@ -2,7 +2,6 @@ CREATE TABLE `employees` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_code` varchar(32) NOT NULL,
   `full_name` varchar(150) NOT NULL,
-  `department_id` bigint DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `email` varchar(255) DEFAULT NULL,
   `position` varchar(100) DEFAULT NULL,
@@ -32,15 +31,6 @@ CREATE TABLE `user_accounts` (
   CONSTRAINT `ck_employee_account_has_employee` CHECK (((`role` <> 'EMPLOYEE') or (`employee_id` is not null)))
 );
 
-CREATE TABLE `holidays` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `holiday_date` date NOT NULL,
-  `name` varchar(100) NOT NULL,
-  `is_recurring` tinyint(1) NOT NULL DEFAULT '0',
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_holidays_date` (`holiday_date`)
-);
 
 CREATE TABLE `shifts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
@@ -92,21 +82,6 @@ CREATE TABLE `attendance_events` (
   CONSTRAINT `fk_events_shift` FOREIGN KEY (`shift_id`) REFERENCES `shifts` (`id`) ON DELETE RESTRICT
 );
 
-CREATE TABLE `leave_requests` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `employee_id` bigint NOT NULL,
-  `leave_type` enum('ANNUAL','SICK','PERSONAL','OTHER') NOT NULL,
-  `start_date` date NOT NULL,
-  `end_date` date NOT NULL,
-  `reason` text NOT NULL,
-  `status` enum('PENDING','APPROVED','REJECTED','CANCELLED') NOT NULL DEFAULT 'PENDING',
-  `approved_by` bigint DEFAULT NULL,
-  `review_note` varchar(500) DEFAULT NULL,
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_leave_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_leave_approver` FOREIGN KEY (`approved_by`) REFERENCES `user_accounts` (`id`) ON DELETE SET NULL
-);
 
 CREATE TABLE `correction_requests` (
   `id` bigint NOT NULL AUTO_INCREMENT,

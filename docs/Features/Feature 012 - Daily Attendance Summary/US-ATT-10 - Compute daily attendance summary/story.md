@@ -14,5 +14,5 @@
 - AC3: Results stored in a new `attendance_daily_summaries` table: `id`, `summary_date DATE`, `total_employees INT`, `total_present INT`, `total_late INT`, `total_absent INT`, `total_on_leave INT`, `computed_at DATETIME`
 - AC4: If a summary already exists for a date (re-run or correction applied), it is replaced (UPSERT)
 - AC5: Summary computation uses `effective()` method to include approved corrections
-- AC6: The job excludes weekends and holidays (see Feature 013) from computation
+- AC6: The job uses configured working weekdays for computation
 - AC7: Job execution is logged for audit purposes

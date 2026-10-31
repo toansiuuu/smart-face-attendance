@@ -89,7 +89,7 @@ class BackendIntegrationTest {
 
   Long employee(String code) {
     return employeeService
-        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123", null, null, code + "@example.test", null, null, null))
+        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123", null, code + "@example.test", null, null, null))
         .id();
   }
 
@@ -110,6 +110,21 @@ class BackendIntegrationTest {
   @Test
   void unauthenticatedAccessRejected() throws Exception {
     mvc.perform(get("/api/employees")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void removedManagementModulesAreNotExposed() throws Exception {
+    var session = login("admin");
+    for (String path : List.of("/api/departments", "/api/holidays", "/api/leave-requests", "/api/leave-balance")) {
+      mvc.perform(get(path).session(session)).andExpect(status().isNotFound());
+      mvc.perform(post(path).session(session).with(csrf()).contentType("application/json").content("{}"))
+          .andExpect(status().isNotFound());
+    }
+    employee("PROFILE");
+    mvc.perform(get("/api/employees").session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[0].dept").doesNotExist())
+        .andExpect(jsonPath("$.items[0].deptId").doesNotExist());
   }
 
   @Test
@@ -158,7 +173,7 @@ class BackendIntegrationTest {
   void inactiveEmployeeSessionCannotAccess() throws Exception {
     Long id = employee("ONE");
     var session = login("ONE");
-    employeeService.update(id, new EmployeeUpdate("Test Employee", "INACTIVE", null, null, null, null, null, null));
+    employeeService.update(id, new EmployeeUpdate("Test Employee", "INACTIVE", null, null, null, null, null));
     mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
   }
 

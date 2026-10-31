@@ -10,23 +10,11 @@ DROP TABLE IF EXISTS `employees`;
 DROP TABLE IF EXISTS `holidays`;
 DROP TABLE IF EXISTS `departments`;
 
--- 2. departments (no FK dependencies)
-CREATE TABLE `departments` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `description` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `manager_id` bigint DEFAULT NULL,
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_departments_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. employees (FK → departments)
 CREATE TABLE `employees` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_code` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `full_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `department_id` bigint DEFAULT NULL,
   `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `email` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `position` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -38,24 +26,10 @@ CREATE TABLE `employees` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_employees_code` (`employee_code`),
   UNIQUE KEY `uq_employees_email` (`email`),
-  UNIQUE KEY `uq_employees_phone` (`phone`),
-  KEY `ix_employees_department` (`department_id`),
-  CONSTRAINT `fk_employees_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL
+  UNIQUE KEY `uq_employees_phone` (`phone`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- deferred FK: departments.manager_id → employees.id
-ALTER TABLE `departments` ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`manager_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL;
 
--- holidays (no FK dependencies)
-CREATE TABLE `holidays` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `holiday_date` date NOT NULL,
-  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `is_recurring` tinyint(1) NOT NULL DEFAULT '0',
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_holidays_date` (`holiday_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. shifts (no FK dependencies)
 CREATE TABLE `shifts` (
@@ -128,25 +102,6 @@ CREATE TABLE `attendance_events` (
   CONSTRAINT `fk_events_shift` FOREIGN KEY (`shift_id`) REFERENCES `shifts` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 7. leave_requests (FK → employees, user_accounts)
-CREATE TABLE `leave_requests` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `employee_id` bigint NOT NULL,
-  `leave_type` enum('ANNUAL','SICK','PERSONAL','OTHER') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `start_date` date NOT NULL,
-  `end_date` date NOT NULL,
-  `reason` text COLLATE utf8mb4_unicode_ci NOT NULL,
-  `status` enum('PENDING','APPROVED','REJECTED','CANCELLED') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING',
-  `approved_by` bigint DEFAULT NULL,
-  `review_note` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`id`),
-  KEY `ix_leave_employee_dates` (`employee_id`, `start_date`, `end_date`),
-  KEY `ix_leave_status` (`status`),
-  CONSTRAINT `fk_leave_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_leave_approver` FOREIGN KEY (`approved_by`) REFERENCES `user_accounts` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `ck_leave_date_order` CHECK (`start_date` <= `end_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 8. correction_requests (FK → employees, shifts, user_accounts)
 CREATE TABLE `correction_requests` (

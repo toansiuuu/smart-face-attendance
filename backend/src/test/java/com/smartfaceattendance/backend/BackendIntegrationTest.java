@@ -89,7 +89,7 @@ class BackendIntegrationTest {
 
   Long employee(String code) {
     return employeeService
-        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123", null, null, null, null, null, null))
+        .create(new EmployeeRequest(code, "Test Employee", "ValidPassword123", null, null, code + "@example.test", null, null, null))
         .id();
   }
 

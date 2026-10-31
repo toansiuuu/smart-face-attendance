@@ -24,6 +24,7 @@ public class EmployeeService {
   private final DepartmentRepository departments;
   private final PasswordEncoder encoder;
   private final String uploadDir;
+  private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
   public EmployeeService(
       EmployeeRepository e,
@@ -31,12 +32,14 @@ public class EmployeeService {
       FaceEnrollmentRepository f,
       DepartmentRepository d,
       PasswordEncoder p,
+      org.springframework.jdbc.core.JdbcTemplate jdbc,
       @Value("${app.upload-dir:uploads}") String uploadDir) {
     employees = e;
     accounts = a;
     faces = f;
     departments = d;
     encoder = p;
+    this.jdbc = jdbc;
     this.uploadDir = uploadDir;
   }
 
@@ -105,15 +108,32 @@ public class EmployeeService {
         .toList();
   }
 
+  private void lockContacts() {
+    jdbc.queryForObject("SELECT id FROM employee_contact_guard WHERE id = 1 FOR UPDATE", Integer.class);
+  }
+
+  private void checkUniqueContacts(String email, String phone, Long excludedId) {
+    if (email != null && !email.isBlank()
+        && employees.existsByEmailIgnoreCaseAndIdNot(email.trim(), excludedId))
+      throw new ApiException(409, "Email đã được sử dụng bởi tài khoản khác.");
+    if (phone != null && !phone.isBlank()
+        && employees.existsByPhoneAndIdNot(phone.trim(), excludedId))
+      throw new ApiException(409, "Số điện thoại đã được sử dụng bởi tài khoản khác.");
+  }
+
   @Transactional
   public EmployeeResponse create(EmployeeRequest r) {
+    lockContacts();
+    if (r.email() == null || r.email().isBlank())
+      throw new ApiException(400, "Email là bắt buộc khi tạo tài khoản nhân viên.");
     checkPassword(r.password());
     validatePhone(r.phone());
     validateDob(r.dateOfBirth());
     validateGender(r.gender());
     String code = r.employeeCode().trim();
-    if (employees.existsByEmployeeCode(code) || accounts.findByUsername(code).isPresent())
-      throw new ApiException(409, "Employee code or username already exists");
+    if (employees.existsByEmployeeCodeIgnoreCase(code) || accounts.existsByUsernameIgnoreCase(code))
+      throw new ApiException(409, "Tên đăng nhập / mã nhân viên đã tồn tại.");
+    checkUniqueContacts(r.email(), r.phone(), -1L);
     var now = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
     if (r.departmentId() != null) {
       departments
@@ -124,8 +144,8 @@ public class EmployeeService {
     e.employeeCode = code;
     e.fullName = r.fullName().trim();
     e.departmentId = r.departmentId();
-    e.phone = r.phone();
-    e.email = r.email();
+    e.phone = r.phone() == null || r.phone().isBlank() ? null : r.phone().trim();
+    e.email = r.email().trim().toLowerCase(Locale.ROOT);
     e.position = r.position();
     e.dateOfBirth = r.dateOfBirth();
     e.gender = r.gender();
@@ -145,10 +165,12 @@ public class EmployeeService {
 
   @Transactional
   public EmployeeResponse update(Long id, EmployeeUpdate r) {
+    lockContacts();
     var e = employees.lockById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
     validatePhone(r.phone());
     validateDob(r.dateOfBirth());
     validateGender(r.gender());
+    checkUniqueContacts(r.email() == null ? e.email : r.email(), r.phone(), id);
     e.fullName = r.fullName().trim();
     e.status = r.status();
     if (r.departmentId() != null) {
@@ -158,7 +180,10 @@ public class EmployeeService {
     }
     e.departmentId = r.departmentId();
     e.phone = r.phone();
-    e.email = r.email();
+    if (r.email() != null) {
+      if (r.email().isBlank()) throw new ApiException(400, "Email không được để trống.");
+      e.email = r.email().trim().toLowerCase(Locale.ROOT);
+    }
     e.position = r.position();
     e.dateOfBirth = r.dateOfBirth();
     e.gender = r.gender();

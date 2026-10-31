@@ -4,5 +4,4 @@ import jakarta.validation.constraints.*;
 
 public record RecoveryRequest(
     @NotBlank @Size(max = 80) String username,
-    @NotBlank @Pattern(regexp = "EMAIL|SMS") String channel,
-    @NotBlank @Size(max = 254) String contact) {}
+    @NotBlank @Pattern(regexp = "EMAIL") String channel) {}

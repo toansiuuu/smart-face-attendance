@@ -22,4 +22,8 @@ public class PasswordRecoveryController {
     org.springframework.security.core.context.SecurityContextHolder.clearContext();
     return Map.of("message", "Đã đặt lại mật khẩu. Vui lòng đăng nhập bằng mật khẩu mới.");
   }
+  @PostMapping("/verify") public Object verify(@Valid @RequestBody VerifyRecoveryCodeRequest body) {
+    service.verify(body);
+    return Map.of("message", "Mã xác minh hợp lệ. Bạn có thể đặt mật khẩu mới.");
+  }
 }

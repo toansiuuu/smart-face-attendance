@@ -37,6 +37,8 @@ CREATE TABLE `employees` (
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_employees_code` (`employee_code`),
+  UNIQUE KEY `uq_employees_email` (`email`),
+  UNIQUE KEY `uq_employees_phone` (`phone`),
   KEY `ix_employees_department` (`department_id`),
   CONSTRAINT `fk_employees_department` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -190,3 +192,6 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
   INDEX ix_reset_created (created_at),
   CONSTRAINT fk_reset_account FOREIGN KEY (account_id) REFERENCES user_accounts(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS employee_contact_guard (id int NOT NULL PRIMARY KEY);
+INSERT INTO employee_contact_guard (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM employee_contact_guard WHERE id = 1);

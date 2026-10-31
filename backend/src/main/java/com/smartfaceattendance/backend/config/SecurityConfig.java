@@ -30,7 +30,7 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/auth/csrf", "/api/auth/login", "/api/auth/password-recovery/options", "/api/health", "/error")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/auth/password-recovery/request", "/api/auth/password-recovery/reset")
+                    .requestMatchers(HttpMethod.POST, "/api/auth/password-recovery/request", "/api/auth/password-recovery/verify", "/api/auth/password-recovery/reset")
                     .permitAll()
                     .requestMatchers("/uploads/**")
                     .permitAll()

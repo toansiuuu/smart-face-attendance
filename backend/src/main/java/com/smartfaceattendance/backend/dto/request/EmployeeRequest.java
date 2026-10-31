@@ -9,7 +9,7 @@ public record EmployeeRequest(
     @NotBlank @Size(min = 12, max = 72) String password,
     Long departmentId,
     @Size(max = 20) String phone,
-    @Size(max = 255) @Email String email,
+    @NotBlank @Size(max = 255) @Email String email,
     @Size(max = 100) String position,
     LocalDate dateOfBirth,
     String gender) {}

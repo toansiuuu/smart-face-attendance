@@ -54,13 +54,8 @@ class RecoveryDeliveryTest {
     }
   }
 
-  @Test void smsConfigurationRequiresCredentialsAndInternationalSender() {
-    var delivery = new RecoveryDelivery();
-    ReflectionTestUtils.setField(delivery, "sid", "AC" + "a".repeat(32));
-    ReflectionTestUtils.setField(delivery, "token", "test-token");
-    ReflectionTestUtils.setField(delivery, "smsFrom", "+12025550123");
-    assertTrue(delivery.available("SMS"));
-    ReflectionTestUtils.setField(delivery, "token", "");
-    assertFalse(delivery.available("SMS"));
+  @Test void smsIsNotAvailable() {
+    assertFalse(new RecoveryDelivery().available("SMS"));
   }
+
 }

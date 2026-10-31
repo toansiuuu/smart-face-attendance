@@ -47,7 +47,7 @@ try {
         try { $random.GetBytes($bytes) } finally { $random.Dispose() }
         $env:LIVENESS_SECRET = [BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()
     }
-    Write-Host 'Building and starting MySQL, liveness, backend, and frontend. The first build may take several minutes.'
+    Write-Host 'Building and starting MySQL, face service, backend, and frontend. The first build may take several minutes.'
     & docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face up -d --build --wait --wait-timeout 180
     if ($LASTEXITCODE -ne 0) {
         & docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face logs --tail 60

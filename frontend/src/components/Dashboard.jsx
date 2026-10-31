@@ -579,8 +579,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-                    <input type="email" name="email" maxLength={255} placeholder="VD: nva@company.com" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
+                    <input type="email" name="email" required maxLength={255} placeholder="Email bắt buộc, VD: nva@company.com" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Chức vụ</label>

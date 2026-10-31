@@ -23,8 +23,8 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 - Internet access is needed for the first build to download images and dependencies.
 
 You do **not** need to install Java, Node.js, Maven, or Python on Windows when
-using this method. Docker runs all four services: MySQL, the Python face service
-(liveness and identity matching), the Java backend, and the React frontend.
+using this method. Docker runs MySQL, the Python face service (liveness and
+identity matching), the Java backend, and the React frontend.
 
 ### Start on Windows Command Prompt
 
@@ -62,8 +62,8 @@ cd /d D:\3monthslearnOOPSQL\smart-face-attendance-main
 docker compose -f docker-compose.yml -f docker-compose.app.yml --profile face stop
 ```
 
-This stops all four application services and keeps your employees, attendance,
-face enrollments, and uploaded files. Docker Desktop itself can remain open.
+This stops all five services and keeps your employees, attendance,
+face enrollments, uploaded files, and test emails. Docker Desktop itself can remain open.
 
 **Do not use `docker compose down -v` for a normal shutdown:** it deletes the
 application's database volumes, including saved face embeddings.
@@ -114,13 +114,33 @@ secrets and URLs. In a separate terminal, run `npm install` and `npm run dev`
 inside `frontend`. Stop foreground development servers with `Ctrl+C` in their
 respective terminals; stop MySQL with `docker compose stop mysql`.
 
-## Quên mật khẩu qua email hoặc SMS
+## Quên mật khẩu qua email
 
-Trang đăng nhập có nút **Quên mật khẩu?**. Người dùng nhập tài khoản/mã nhân viên,
-chọn email hoặc SMS và nhập thông tin liên hệ đã đăng ký. Hệ thống gửi mã OTP
+Trang đăng nhập có nút **Quên mật khẩu?**. Người dùng chỉ nhập tài khoản/mã nhân viên
+và xác nhận gửi mã qua email. Hệ thống tự lấy email đã lưu trong hồ sơ để gửi mã OTP
 6 chữ số để người dùng **đặt mật khẩu mới**, không gửi lại mật khẩu cũ.
 
-### Cấu hình gửi tin (quản trị viên)
+Luồng giao diện gồm ba bước riêng: **Xác nhận gửi mã qua email → nhập mã và bấm
+Xác nhận mã → đặt mật khẩu mới**. Email chỉ chứa OTP, không chứa mật khẩu mới.
+Mật khẩu chỉ được thay đổi khi hoàn tất bước cuối; việc xác minh OTP không tự
+đổi mật khẩu hoặc tự đăng nhập.
+
+### Gửi mã đến email của nhân viên
+
+1. Admin tạo tài khoản và lưu email, số điện thoại của nhân viên trong hồ sơ.
+2. Nhân viên chọn **Quên mật khẩu**, nhập tài khoản, chọn gửi mã qua email rồi xác nhận gửi mã.
+3. Nhân viên mở Gmail của chính mình để lấy mã.
+4. Nhập mã, bấm **Xác nhận mã**, sau đó đặt mật khẩu mới và đăng nhập lại.
+
+Người nhận luôn là nhân viên của tài khoản đang khôi phục. Không có địa chỉ
+admin dự phòng, hộp thư dùng chung hay Mailpit trong cấu hình chạy.
+
+### Cấu hình dịch vụ gửi của ứng dụng
+
+Source đã có luồng gửi SMTP. Để thư tới người nhận thật,
+cần cấu hình nhà cung cấp một lần; khi chưa cấu hình, ứng dụng báo rõ và không
+giả lập gửi thành công. Không cần mật khẩu Gmail của người nhận.
+
 
 Trong Command Prompt tại thư mục dự án:
 
@@ -129,38 +149,48 @@ if not exist .env copy .env.example .env
 notepad .env
 ```
 
+Email trong hồ sơ là địa chỉ **nhận mã** của từng người dùng. Cấu hình SMTP bên
+dưới là tài khoản/dịch vụ **gửi mã chung của hệ thống**, quản trị viên thiết lập
+một lần; người dùng không phải nhập hoặc cấu hình SMTP riêng.
+
 Điền cấu hình của nhà cung cấp vào `.env`:
 
-- **Email SMTP:** `MAIL_HOST`, `MAIL_PORT` (mặc định `587`), `MAIL_USERNAME`,
+- **Email SMTP thật:** `MAIL_HOST`, `MAIL_PORT` (thường `587`), `MAIL_USERNAME`,
   `MAIL_PASSWORD`, `MAIL_FROM`. Mặc định dùng xác thực và STARTTLS
   (`MAIL_AUTH=true`, `MAIL_STARTTLS=true`). Dùng mật khẩu ứng dụng hoặc thông tin
   SMTP do nhà cung cấp cấp; không dùng thông tin mẫu làm thông tin thật.
-- **SMS Twilio:** `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
-  `TWILIO_FROM_NUMBER` (số gửi có hỗ trợ SMS, định dạng quốc tế như `+1...`).
-  Cấu hình quyền gửi tới quốc gia/số nhận trong tài khoản Twilio.
-- **Tài khoản `admin` ban đầu không gắn hồ sơ nhân viên:** đặt
-  `RECOVERY_ADMIN_EMAIL` và/hoặc `RECOVERY_ADMIN_PHONE`. Nếu đổi tên tài khoản
-  quản trị, cập nhật `RECOVERY_ADMIN_USERNAME` cho khớp.
 
 Sau khi lưu cấu hình, chạy lại `run-all.bat`. Docker Compose đọc `.env` và đưa
 cấu hình vào backend. Không cần sửa mã nguồn. `.env` đã được Git bỏ qua;
-không đưa mật khẩu SMTP hay token Twilio lên GitHub.
+không đưa mật khẩu SMTP lên GitHub.
 
-Chỉ kênh đã cấu hình đầy đủ mới được bật trong giao diện. Khi chưa cấu hình cả
-hai kênh, giao diện thông báo cần liên hệ quản trị viên. Thông tin cấu hình hợp
-lệ vẫn cần được kiểm tra với nhà cung cấp thực tế; dự án không giả lập gửi tin.
+#### Dùng Gmail làm địa chỉ gửi chung
+
+1. Bật Xác minh 2 bước cho tài khoản Google dùng để gửi mã.
+2. Tạo **Mật khẩu ứng dụng** theo [hướng dẫn chính thức của Google](https://support.google.com/accounts/answer/185833?hl=vi).
+3. Trong `.env`, đặt `MAIL_HOST=smtp.gmail.com`, `MAIL_PORT=587`,
+   `MAIL_AUTH=true`, `MAIL_STARTTLS=true`. Điền cùng một địa chỉ Gmail gửi vào
+   `MAIL_USERNAME` và `MAIL_FROM`; điền mật khẩu ứng dụng vào `MAIL_PASSWORD`.
+   Không dùng mật khẩu đăng nhập Gmail, không gửi mật khẩu ứng dụng vào chat.
+4. Chạy lại `run-all.bat`. Khi cấu hình đầy đủ, lựa chọn Email được bật; thử
+   luồng quên mật khẩu với tài khoản có email trong hồ sơ để kiểm tra thư nhận.
+
+Các bước xác minh Google và tạo mật khẩu ứng dụng phải do chủ tài khoản thực
+hiện. Chỉ có email người nhận trong hồ sơ chưa đủ để hệ thống gửi thư.
+
+Chỉ kênh có cấu hình dịch vụ gửi đầy đủ mới được bật. Cần kiểm tra khả năng gửi thật với nhà cung cấp.
 
 ### Điều kiện để nhận mã
 
-- Email/SĐT phải khớp thông tin đã lưu trong hồ sơ nhân viên và tài khoản còn
-  hoạt động. Nhập email/SĐT khi tạo nhân viên; hồ sơ hiện có có thể cập nhật
+- Email hợp lệ là bắt buộc khi tạo tài khoản nhân viên, được kiểm tra cả trên
+  giao diện và API. Backend tự chọn email đã lưu khi yêu cầu OTP, không nhận
+  địa chỉ gửi tới từ form quên mật khẩu. Tài khoản phải còn hoạt động.
+- Hồ sơ cũ chưa có email cần được quản lý bổ sung; hồ sơ hiện có có thể cập nhật
   qua API quản lý `PATCH /api/employees/{id}` bằng tài khoản quản lý.
-- Số điện thoại Việt Nam dạng `09...` được chuẩn hóa thành `+849...` khi gửi SMS.
-  `RECOVERY_PHONE_COUNTRY_CODE` mặc định là `84`.
 - Mã hết hạn sau 10 phút, chỉ dùng một lần, tối đa 5 lần nhập sai. Chờ ít nhất
   60 giây để yêu cầu mã tiếp theo; tối đa 3 yêu cầu/tài khoản trong 15 phút
   và 10 yêu cầu/IP trong một giờ.
-- Câu trả lời công khai không tiết lộ tài khoản/email/SĐT có tồn tại hay không.
+- Câu trả lời công khai không tiết lộ tài khoản/email có tồn tại hay không.
   Nếu chưa nhận email, kiểm tra thư rác và thông tin đã đăng ký.
 - Đặt mật khẩu mới thành công sẽ làm các phiên đăng nhập cũ mất hiệu lực.
 
@@ -169,8 +199,8 @@ Backend tự chạy SQL `CREATE TABLE IF NOT EXISTS` chỉ để bổ sung bản
 Không cần xóa database. Bản SQL cũng có trong `database/migrations/V006__password_reset.sql`.
 Các thay đổi database cũ khác vẫn cần áp dụng migration tương ứng.
 
-Tài liệu nhà cung cấp: [SMTP với Spring](https://docs.spring.io/spring-boot/reference/io/email.html),
-[Twilio SMS API](https://www.twilio.com/docs/messaging/api/message-resource).
+Tài liệu nhà cung cấp: [SMTP với Spring](https://docs.spring.io/spring-boot/reference/io/email.html).
+
 
 ## Project Structure
 
@@ -291,3 +321,9 @@ smart-face-attendance/
 - **PR target:** `main`
 
 See `docs/Guideline/git-branch-strategy.md` for full details.
+
+### Không trùng thông tin nhân viên
+
+Tên đăng nhập (mã nhân viên), email và số điện thoại không được trùng giữa các tài khoản. Email/tên đăng nhập được kiểm tra không phân biệt hoa thường; email được bỏ khoảng trắng đầu/cuối và lưu chữ thường. Số điện thoại có thể để trống; các số đã điền phải khác nhau. Quy tắc áp dụng cả tạo và sửa hồ sơ. Hai nhân viên vẫn có thể cùng họ tên.
+
+Backend tự thêm unique index email và số điện thoại khi khởi động với database cũ. Nếu dữ liệu cũ trùng, backend giữ nguyên hồ sơ và hoãn index tương ứng, ghi cảnh báo để admin sửa. Mọi thao tác tạo/sửa dùng khóa database chung để ngăn dữ liệu trùng mới, kể cả các yêu cầu đồng thời. Sau khi sửa các hồ sơ cũ, khởi động lại để thêm index. Khôi phục mật khẩu chỉ còn qua email; yêu cầu SMS bị từ chối.

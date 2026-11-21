@@ -1,5 +1,6 @@
 import {employeeErrors, nameError} from '../validation';
 import SchedulePanel from './SchedulePanel';
+import ReportsPanel from './ReportsPanel';
 import PasswordDialog from './PasswordDialog';
 import FaceEnrollmentDialog from './FaceEnrollmentDialog';
 import {api,allPages,localDay,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,logout,summarizeAttendance} from '../api';
@@ -182,7 +183,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <div>
           <p className="text-sm text-gray-500 font-medium mb-1">Đi muộn</p>
           <div className="flex items-baseline gap-2">
-            {isLoading ? <div className="h-8 w-10 bg-gray-200 animate-pulse rounded"></div> : <p className="text-3xl font-black text-gray-800">{records.filter(r => r.status === 'Đi muộn').length}</p>}
+            {isLoading ? <div className="h-8 w-10 bg-gray-200 animate-pulse rounded"></div> : <p className="text-3xl font-black text-gray-800">{records.filter(r => r.workingDay && r.late).length}</p>}
             <span className="text-sm text-gray-400">trong tháng</span>
           </div>
         </div>
@@ -487,6 +488,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
           <button onClick={() => setActiveTab('NHAN_VIEN')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'NHAN_VIEN' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>Nhân viên</button>
           <button onClick={() => setActiveTab('BANG_CONG')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'BANG_CONG' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>Bảng công</button>
           <button onClick={() => setActiveTab('YEU_CAU')} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'YEU_CAU' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>Yêu cầu chờ duyệt</button>
+          <button onClick={() => setActiveTab('BAO_CAO')} aria-current={activeTab === 'BAO_CAO' ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'BAO_CAO' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M7 15v-4m5 4V5m5 10V8"/></svg>Thống kê &amp; báo cáo</button>
           <button onClick={() => setActiveTab('CAU_HINH_LICH')} aria-current={activeTab === 'CAU_HINH_LICH' ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors w-full text-left ${activeTab === 'CAU_HINH_LICH' ? 'bg-blue-600/10 border-l-4 border-blue-500 text-blue-500 font-semibold' : 'hover:bg-slate-800 opacity-80 font-medium'}`}><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" strokeLinecap="round" d="M8 3v4m8-4v4M4 10h16M5 5h14a1 1 0 011 1v14H4V6a1 1 0 011-1z"/></svg>Cấu hình lịch</button>
         </nav>
       </div>
@@ -495,11 +497,11 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
         <header className="bg-white px-8 py-4 flex justify-between items-center border-b border-gray-100 shrink-0 sticky top-0 z-10">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
-              {activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
+              {activeTab === 'BAO_CAO' && 'Thống kê & báo cáo'}{activeTab === 'TONG_QUAN' && 'Tổng quan hệ thống'}{activeTab === 'NHAN_VIEN' && 'Quản lý hồ sơ nhân viên'}{activeTab === 'BANG_CONG' && 'Quản lý dữ liệu chấm công'}{activeTab === 'YEU_CAU' && 'Xét duyệt yêu cầu chỉnh sửa'}{activeTab === 'CAU_HINH_LICH' && 'Cấu hình lịch làm việc'}
             </h2>
           </div>
           <div className="flex items-center gap-5" ref={headerRef}>
-            <div className="relative">
+            <div className={activeTab === 'BAO_CAO' ? 'hidden' : 'relative'}>
               <button onClick={() => {setShowMonthMenu(!showMonthMenu); setShowProfileMenu(false);}} className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">Tháng {selectedMonth}</button>
               {showMonthMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 shadow-xl rounded-xl py-2 z-50 animate-fade-in">
@@ -529,7 +531,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
         <div className="p-8 max-w-7xl mx-auto w-full"><div className="mb-4 flex gap-3"><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
           {apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3 mb-3">{apiError}</p>}
-          {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa chọn ngày làm việc cho lịch hiện tại. <button type="button" className="font-semibold text-blue-700 underline" onClick={()=>setActiveTab('CAU_HINH_LICH')}>Mở cấu hình lịch</button> để bật tính ngày vắng.</p>}
+          {activeTab !== 'BAO_CAO' && !policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa chọn ngày làm việc cho lịch hiện tại. <button type="button" className="font-semibold text-blue-700 underline" onClick={()=>setActiveTab('CAU_HINH_LICH')}>Mở cấu hình lịch</button> để bật tính ngày vắng.</p>}
+          {activeTab === 'BAO_CAO' && <ReportsPanel employees={employees} reload={reload}/>}
           {activeTab === 'CAU_HINH_LICH' && <SchedulePanel onSaved={()=>setReload(value=>value+1)}/>}
           {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}

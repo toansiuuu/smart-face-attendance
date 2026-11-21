@@ -34,6 +34,10 @@ public class ShiftService {
         .orElseThrow(() -> new ApiException(409, "No fixed schedule configured for " + date));
   }
 
+  public List<Shift> timeline() {
+    return shifts.findAll().stream().sorted(Comparator.comparing(s -> s.effectiveFrom)).toList();
+  }
+
   public String name(Long id) {
     return shifts.findById(id).orElseThrow(() -> new ApiException(404, "Không tìm thấy lịch.")).shiftName;
   }

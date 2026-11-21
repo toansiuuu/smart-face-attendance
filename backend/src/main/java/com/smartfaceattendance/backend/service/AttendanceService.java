@@ -146,100 +146,103 @@ public class AttendanceService {
   }
 
   public DayResponse day(Employee e, LocalDate date) {
-    var times = effective(e.id, date);
+    var rawTimes = raw(e.id, date);
+    var approved = corrections.findByEmployeeIdAndWorkDateBetween(e.id, date, date).stream()
+        .filter(c -> "APPROVED".equals(c.status)).toList();
     Long sid = null;
-    List<Milestone> points = List.of();
-    try {
-      sid = historicalShift(e.id, date);
-      points = shifts.points(sid);
-    } catch (ApiException ex) {
-      if (ex.status != 409) throw ex;
-    }
-    var workingDays = sid == null ? Set.<DayOfWeek>of() : shifts.workingDays(sid);
-    boolean configured = !workingDays.isEmpty();
-    String status = "Đang diễn ra";
-    boolean complete = times.size() == 4;
-    var now = now();
-    if (sid == null) status = "Chưa cấu hình lịch";
-    else if (!AttendanceMath.ordered(times)) status = "Sai thứ tự giờ";
-    else if (configured && !workingDays.contains(date.getDayOfWeek()) && times.isEmpty())
-      status = "Ngày nghỉ";
-    else {
-      boolean missing =
-          points.stream()
-              .anyMatch(
-                  m ->
-                      !times.containsKey(m.eventType)
-                          && now.isAfter(LocalDateTime.of(date, m.windowEnd)));
-      boolean late =
-          points.stream()
-              .anyMatch(
-                  m ->
-                      m.eventType.endsWith("IN")
-                          && times.containsKey(m.eventType)
-                          && times
-                              .get(m.eventType)
-                              .isAfter(LocalDateTime.of(date, m.targetTime).plusMinutes(grace)));
-      boolean early =
-          points.stream()
-              .anyMatch(
-                  m ->
-                      m.eventType.endsWith("OUT")
-                          && times.containsKey(m.eventType)
-                          && times.get(m.eventType).isBefore(LocalDateTime.of(date, m.targetTime)));
-      if (missing)
-        status =
-            times.isEmpty()
-                ? (!configured ? "Chưa có dữ liệu" : points.stream().allMatch(m -> now.isAfter(LocalDateTime.of(date, m.windowEnd))) ? "Vắng mặt" : "Đang diễn ra")
-                : "Thiếu mốc chấm công";
-      else if (late) status = "Đi muộn";
-      else if (early) status = "Về sớm";
-      else if (complete) status = "Đúng giờ";
-    }
-    var shown = display(times);
-    return new DayResponse(
-        e.id + "-" + date,
-        e.id,
-        e.employeeCode,
-        e.fullName,
-        EmployeeService.initials(e.fullName),
-        date,
-        shown.get("MORNING_IN"),
-        shown.get("WORK_OUT"),
-        status,
-        AttendanceMath.workedMinutes(times),
-        complete,
-        shown,
-        display(raw(e.id, date)),
-        sid,
-        configured);
+    try { sid = historicalShift(e.id, date); }
+    catch (ApiException ex) { if (ex.status != 409) throw ex; }
+    return describe(e, date, rawTimes, approved, sid,
+        sid == null ? List.of() : shifts.points(sid),
+        sid == null ? Set.of() : shifts.workingDays(sid), now());
   }
 
+  private DayResponse describe(Employee e, LocalDate date,
+      Map<String, LocalDateTime> rawTimes, List<Correction> approved, Long sid,
+      List<Milestone> points, Set<DayOfWeek> workingDays, LocalDateTime evaluatedAt) {
+    var times = new LinkedHashMap<>(rawTimes);
+    approved.stream().sorted(Comparator.comparing((Correction c) -> c.reviewedAt,
+        Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(c -> c.id))
+        .forEach(c -> times.put(c.eventType, c.proposedOccurredAt));
+    boolean configured = !workingDays.isEmpty();
+    boolean workingDay = configured && workingDays.contains(date.getDayOfWeek());
+    boolean invalidOrder = !AttendanceMath.ordered(times);
+    boolean complete = !invalidOrder && times.keySet().containsAll(ShiftService.TYPES);
+    boolean missing = points.stream().anyMatch(m -> !times.containsKey(m.eventType)
+        && evaluatedAt.isAfter(LocalDateTime.of(date, m.windowEnd)));
+    boolean late = !invalidOrder && points.stream().anyMatch(m -> m.eventType.endsWith("IN")
+        && times.containsKey(m.eventType)
+        && times.get(m.eventType).isAfter(LocalDateTime.of(date, m.targetTime).plusMinutes(grace)));
+    boolean early = !invalidOrder && points.stream().anyMatch(m -> m.eventType.endsWith("OUT")
+        && times.containsKey(m.eventType)
+        && times.get(m.eventType).isBefore(LocalDateTime.of(date, m.targetTime)));
+    String status = "Đang diễn ra";
+    if (sid == null) status = "Chưa cấu hình lịch";
+    else if (invalidOrder) status = "Sai thứ tự giờ";
+    else if (configured && !workingDay && times.isEmpty()) status = "Ngày nghỉ";
+    else if (missing) status = times.isEmpty()
+        ? (!configured ? "Chưa có dữ liệu" : points.stream().allMatch(m ->
+            evaluatedAt.isAfter(LocalDateTime.of(date, m.windowEnd))) ? "Vắng mặt" : "Đang diễn ra")
+        : "Thiếu mốc chấm công";
+    else if (late) status = "Đi muộn";
+    else if (early) status = "Về sớm";
+    else if (complete) status = "Đúng giờ";
+    var shown = display(times);
+    return new DayResponse(e.id + "-" + date, e.id, e.employeeCode, e.fullName,
+        EmployeeService.initials(e.fullName), date, shown.get("MORNING_IN"), shown.get("WORK_OUT"),
+        status, invalidOrder ? 0 : AttendanceMath.workedMinutes(times), complete, shown,
+        display(rawTimes), sid, configured, workingDay, !times.isEmpty(), late, early,
+        missing && !times.isEmpty(), invalidOrder, !approved.isEmpty());
+  }
+
+  private record DayKey(Long employeeId, LocalDate date) {}
+
+  @Transactional(readOnly = true)
   public List<DayResponse> report(Long employeeId, LocalDate from, LocalDate to) {
     if (from.isAfter(to) || java.time.temporal.ChronoUnit.DAYS.between(from, to) > 366)
       throw new ApiException(400, "Choose an ordered range of at most 367 days");
-    var staff =
-        employeeId == null
-            ? employees.findAll()
-            : List.of(
-                employees
-                    .findById(employeeId)
-                    .orElseThrow(() -> new ApiException(404, "Employee not found")));
+    var staff = employeeId == null ? employees.findAll() : List.of(employees.findById(employeeId)
+        .orElseThrow(() -> new ApiException(404, "Employee not found")));
+    var evaluatedAt = now();
+    var end = to.isBefore(evaluatedAt.toLocalDate()) ? to : evaluatedAt.toLocalDate();
+    if (from.isAfter(end)) return List.of();
+    // Load each source once, rather than querying events and corrections per employee-day.
+    var rawByDay = new HashMap<DayKey, Map<String, LocalDateTime>>();
+    var recordedShifts = new HashMap<DayKey, Long>();
+    var rawEvents = employeeId == null ? events.findByWorkDateBetween(from, end)
+        : events.findByEmployeeIdAndWorkDateBetween(employeeId, from, end);
+    rawEvents.stream().sorted(Comparator.comparing(a -> a.id)).forEach(a -> {
+      var key = new DayKey(a.employeeId, a.workDate);
+      rawByDay.computeIfAbsent(key, k -> new LinkedHashMap<>()).put(a.eventType, a.occurredAt);
+      recordedShifts.putIfAbsent(key, a.shiftId);
+    });
+    var approvedByDay = new HashMap<DayKey, List<Correction>>();
+    var approved = employeeId == null ? corrections.findByWorkDateBetweenAndStatus(from, end, "APPROVED")
+        : corrections.findByEmployeeIdAndWorkDateBetween(employeeId, from, end);
+    approved.stream().filter(c -> "APPROVED".equals(c.status)).sorted(Comparator.comparing(c -> c.id))
+        .forEach(c -> approvedByDay.computeIfAbsent(new DayKey(c.employeeId, c.workDate),
+            k -> new ArrayList<>()).add(c));
+    var versions = shifts.timeline();
+    var pointCache = new HashMap<Long, List<Milestone>>();
+    var daysCache = new HashMap<Long, Set<DayOfWeek>>();
     var result = new ArrayList<DayResponse>();
-    var today = now().toLocalDate();
-    for (LocalDate date = from;
-        !date.isAfter(to) && !date.isAfter(today);
-        date = date.plusDays(1)) {
+    for (LocalDate date = from; !date.isAfter(end); date = date.plusDays(1)) {
+      Long applicableId = null;
+      for (var version : versions) if (!version.effectiveFrom.isAfter(date)) applicableId = version.id;
       for (var e : staff) {
         if (date.isBefore(e.createdAt.toLocalDate())) continue;
-        if (!"ACTIVE".equals(e.status)
-            && raw(e.id, date).isEmpty()
-            && effective(e.id, date).isEmpty()) continue;
-        result.add(day(e, date));
+        var key = new DayKey(e.id, date);
+        var rawTimes = rawByDay.getOrDefault(key, Map.of());
+        var changes = approvedByDay.getOrDefault(key, List.of());
+        if (!"ACTIVE".equals(e.status) && rawTimes.isEmpty() && changes.isEmpty()) continue;
+        Long sid = recordedShifts.get(key);
+        if (sid == null) sid = changes.isEmpty() ? applicableId : changes.get(0).shiftId;
+        result.add(describe(e, date, rawTimes, changes, sid,
+            sid == null ? List.of() : pointCache.computeIfAbsent(sid, shifts::points),
+            sid == null ? Set.of() : daysCache.computeIfAbsent(sid, shifts::workingDays), evaluatedAt));
       }
     }
-    result.sort(
-        Comparator.comparing(DayResponse::date).reversed().thenComparing(DayResponse::employeeId));
+    result.sort(Comparator.comparing(DayResponse::date).reversed().thenComparing(DayResponse::employeeId));
     return result;
   }
 }

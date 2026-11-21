@@ -6,6 +6,8 @@ import java.util.*;
 import org.springframework.data.jpa.repository.*;
 
 public interface AttendanceEventRepository extends JpaRepository<AttendanceEvent, Long> {
+  List<AttendanceEvent> findByWorkDateBetween(LocalDate start, LocalDate end);
+
   List<AttendanceEvent> findByEmployeeIdAndWorkDateBetween(Long id, LocalDate start, LocalDate end);
 
   Optional<AttendanceEvent> findByEmployeeIdAndWorkDateAndEventType(

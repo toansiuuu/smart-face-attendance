@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 public interface CorrectionRepository extends JpaRepository<Correction, Long> {
+  List<Correction> findByWorkDateBetweenAndStatus(LocalDate start, LocalDate end, String status);
+
   List<Correction> findByEmployeeIdAndWorkDateBetween(Long id, LocalDate start, LocalDate end);
 
   List<Correction> findByEmployeeIdOrderByCreatedAtDesc(Long id);

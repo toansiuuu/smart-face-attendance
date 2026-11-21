@@ -44,6 +44,7 @@ class BackendIntegrationTest {
   @Autowired EmployeeService employeeService;
   @Autowired ShiftService shiftService;
   @Autowired AttendanceService attendance;
+  @Autowired AttendanceReportService reports;
   @Autowired CorrectionService corrections;
   @Autowired CorrectionAttachments correctionAttachments;
   @Autowired AttendanceEventRepository attendanceEvents;
@@ -115,6 +116,148 @@ class BackendIntegrationTest {
   @Test
   void unauthenticatedAccessRejected() throws Exception {
     mvc.perform(get("/api/employees")).andExpect(status().isUnauthorized());
+  }
+
+  private AttendanceService reportingClock(LocalDateTime instant) {
+    return new AttendanceService(employees, attendanceEvents, correctionRecords, shiftService, 0) {
+      @Override public LocalDateTime now() { return instant; }
+    };
+  }
+
+  private Long reportingEmployee(String code) {
+    Long id = employee(code);
+    var e = employees.findById(id).orElseThrow();
+    e.createdAt = today.minusDays(10).atStartOfDay();
+    employees.saveAndFlush(e);
+    return id;
+  }
+
+  private void reportingCorrection(Long id, LocalDate date, String type, LocalTime time, String status) {
+    var c = new Correction();
+    c.employeeId = id; c.workDate = date; c.shiftId = shiftService.applicable(date).id;
+    c.eventType = type; c.proposedOccurredAt = date.atTime(time); c.reason = "Report test correction";
+    c.status = status; c.requestedByAccountId = accounts.findByEmployeeId(id).orElseThrow().id;
+    c.createdAt = attendance.now();
+    if (status.equals("APPROVED")) {c.reviewedAt = attendance.now(); c.reviewedByAccountId = manager.id;}
+    correctionRecords.saveAndFlush(c);
+  }
+
+  @Test
+  void reportsCountOverlappingFlagsAndUseOnlyApprovedCorrections() {
+    schedule();
+    Long id = reportingEmployee("REPORT1");
+    reportingEmployee("REPORT2");
+    var date = today.minusDays(1);
+    attendance.record(id, date.atTime(8, 30), null);
+    attendance.record(id, date.atTime(11, 45), null);
+    attendance.record(id, date.atTime(13, 0), null);
+    var before = reports.summary(null, date, date);
+    assertEquals(1, before.totals().lateDays());
+    assertEquals(1, before.totals().earlyDays());
+    assertEquals(1, before.totals().incompleteDays());
+    assertEquals(1, before.totals().absentDays());
+    assertEquals(195, before.totals().workedMinutes());
+    assertEquals(50.0, before.totals().attendanceRate());
+    reportingCorrection(id, date, "MORNING_IN", LocalTime.of(8, 0), "APPROVED");
+    reportingCorrection(id, date, "LUNCH_OUT", LocalTime.NOON, "PENDING");
+    reportingCorrection(id, date, "WORK_OUT", LocalTime.of(17, 0), "APPROVED");
+    var report = reports.summary(null, date, date);
+    assertEquals(0, report.totals().lateDays());
+    assertEquals(1, report.totals().earlyDays());
+    assertEquals(0, report.totals().incompleteDays());
+    assertEquals(1, report.totals().completeDays());
+    assertEquals(465, report.totals().workedMinutes());
+    assertEquals(1, report.totals().correctedDays());
+    var row = report.details().stream().filter(d -> d.employeeId().equals(id)).findFirst().orElseThrow();
+    assertEquals("08:30", row.rawMilestones().get("MORNING_IN"));
+    assertEquals("08:00", row.milestones().get("MORNING_IN"));
+    assertEquals("11:45", row.milestones().get("LUNCH_OUT"));
+    var filtered = reports.summary(id, date, date);
+    assertEquals(1, filtered.employeeCount());
+    assertEquals(100.0, filtered.totals().attendanceRate());
+    assertEquals(report.totals().workedMinutes(), report.byDate().get(0).totals().workedMinutes());
+    assertEquals(report.totals().presentDays(), report.byEmployee().stream().mapToLong(e -> e.totals().presentDays()).sum());
+  }
+
+  @Test
+  void reportsDoNotTreatUnknownCalendarsOrNonWorkingDaysAsAbsences() {
+    Long id = reportingEmployee("REPORTCAL");
+    var date = today.minusDays(1);
+    var unknown = reports.summary(id, date, date);
+    assertEquals(1, unknown.totals().unconfiguredDays());
+    assertEquals(0, unknown.totals().absentDays());
+    assertNull(unknown.totals().attendanceRate());
+    schedule();
+    String days = Arrays.stream(DayOfWeek.values()).filter(d -> d != date.getDayOfWeek())
+        .map(DayOfWeek::name).collect(java.util.stream.Collectors.joining(","));
+    jdbc.update("UPDATE shift_working_day_policy SET working_days = ?", days);
+    var off = reports.summary(id, date, date);
+    assertEquals(1, off.totals().offDays());
+    assertEquals(0, off.totals().absentDays());
+    assertNull(off.totals().attendanceRate());
+  }
+
+  @Test
+  void reportsKeepCurrentUnscannedDayPendingAndCheckGraceWithSeconds() {
+    schedule(); Long id = reportingEmployee("REPORTTIME");
+    var clock = reportingClock(today.atTime(12, 0));
+    var service = new AttendanceReportService(clock, employees);
+    var pending = service.summary(id, today, today);
+    assertEquals(1, pending.totals().pendingDays());
+    assertEquals(0, pending.totals().absentDays());
+    assertNull(pending.totals().attendanceRate());
+    attendance.record(id, today.atTime(8, 0, 1), null);
+    assertEquals(1, service.summary(id, today, today).totals().lateDays());
+    var withGrace = new AttendanceService(employees, attendanceEvents, correctionRecords, shiftService, 1) {
+      @Override public LocalDateTime now() {return today.atTime(12, 0);}
+    };
+    assertEquals(0, new AttendanceReportService(withGrace, employees).summary(id, today, today).totals().lateDays());
+  }
+
+  @Test
+  void reportsPreserveHistoricalScheduleEvenWhenLaterVersionExists() {
+    schedule(); Long id = reportingEmployee("REPORTHISTORY");
+    var date = today.minusDays(1);
+    attendance.record(id, date.atTime(8, 30), null);
+    var version = new Shift(); version.shiftCode = "NEXT"; version.shiftName = "Next version";
+    version.effectiveFrom = today; shiftRecords.saveAndFlush(version);
+    jdbc.update("INSERT INTO shift_working_day_policy (shift_id, working_days) VALUES (?, ?)", version.id, today.getDayOfWeek().name());
+    var report = reports.summary(id, date, today);
+    var old = report.details().stream().filter(d -> d.date().equals(date)).findFirst().orElseThrow();
+    assertTrue(old.late());
+    assertNotEquals(version.id, old.shiftId());
+  }
+
+  @Test
+  void reportsEnforceRangeAndDoNotInventPreEmploymentOrInactiveDays() {
+    schedule(); Long id = employee("REPORTNEW");
+    var date = today.minusDays(1);
+    var empty = reports.summary(id, date, date);
+    assertEquals(0, empty.details().size());
+    assertEquals(1, empty.byDate().size());
+    assertEquals(1, empty.byEmployee().size());
+    var e = employees.findById(id).orElseThrow(); e.status = "INACTIVE"; employees.saveAndFlush(e);
+    assertTrue(reports.summary(id, today, today).details().isEmpty());
+    assertEquals(400, assertThrows(ApiException.class, () -> reports.summary(null, today, date)).status);
+    assertEquals(400, assertThrows(ApiException.class, () -> reports.summary(null, today, today.plusDays(1))).status);
+    assertEquals(400, assertThrows(ApiException.class, () -> reports.summary(null, today.minusDays(367), today)).status);
+    assertEquals(367, reports.summary(null, today.minusDays(366), today).byDate().size());
+    assertEquals(404, assertThrows(ApiException.class, () -> reports.summary(Long.MAX_VALUE, today, today)).status);
+  }
+
+  @Test
+  void reportingEndpointIsManagerOnlyAndDoesNotCachePersonalData() throws Exception {
+    employee("REPORTAUTH");
+    String url = "/api/reports/attendance?from=" + today + "&to=" + today;
+    mvc.perform(get(url)).andExpect(status().isUnauthorized());
+    mvc.perform(get(url).session(login("REPORTAUTH"))).andExpect(status().isForbidden());
+    mvc.perform(get(url).session(login("admin"))).andExpect(status().isOk())
+        .andExpect(header().string("Cache-Control", "no-store"))
+        .andExpect(jsonPath("$.employeeCount").value(1))
+        .andExpect(jsonPath("$.totals.unconfiguredDays").value(1))
+        .andExpect(jsonPath("$.byDate[0].date").value(today.toString()));
+    mvc.perform(get("/api/reports/attendance?from=bad&to=" + today).session(login("admin")))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

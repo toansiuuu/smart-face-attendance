@@ -10,9 +10,22 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 | Frontend | React 19, Vite 8, TailwindCSS 4, React Router 7 |
 | Database | MySQL 8 (Docker) |
 | Auth | Session-based + CSRF (BCrypt password encoding) |
-| Export | Client-side Excel via ExcelJS |
+| Export | Excel (ExcelJS) and Vietnamese PDF (jsPDF / AutoTable) |
 | Face Liveness | Python API using supplied ONNX detector and anti-spoofing model in `deploy/` |
 | Face Identity Recognition | OpenCV SFace with a persistent embedding gallery in the Python face service |
+
+## Thống kê và báo cáo
+
+Đăng nhập tài khoản quản trị, chọn **Thống kê & báo cáo** ở thanh bên.
+
+- Chọn khoảng ngày (tối đa 367 ngày, đến hôm nay) và tất cả hoặc một nhân viên, rồi bấm **Áp dụng bộ lọc**. Có các lựa chọn nhanh tháng này, tháng trước, 7/30 ngày qua.
+- Xem ngày có mặt, vắng, đi muộn, về sớm, thiếu mốc, tổng giờ làm, tỷ lệ có mặt và biểu đồ theo ngày/tuần/tháng. Bảng nhân viên hỗ trợ tìm kiếm, sắp xếp, phân trang và xem từng ngày.
+- **Xuất Excel** tải bốn sheet: tổng quan, theo nhân viên, theo ngày và chi tiết (gồm giờ gốc và giờ sau chỉnh sửa). **Xuất PDF** tải bản báo cáo tiếng Việt có biểu đồ và bảng tổng hợp/chi tiết, tự chia trang.
+- File xuất luôn chứa toàn bộ phạm vi đã áp dụng, không bị giới hạn bởi tìm kiếm hoặc trang đang xem. Font Noto Sans được phục vụ cùng ứng dụng, không cần dịch vụ xuất file bên ngoài.
+
+Số liệu dùng giờ sau chỉnh sửa **đã duyệt**, theo múi giờ Việt Nam và phiên bản lịch của từng ngày. Ngày vắng chỉ chốt sau khi mọi cửa sổ quét kết thúc; không tính ngày nghỉ, ngày trước khi tạo nhân viên hoặc ngày chưa cấu hình lịch là vắng. Tỷ lệ có mặt = số ngày có mặt theo lịch / (số ngày có mặt theo lịch + số ngày vắng đã chốt). Ngày có mặt chỉ cần một mốc; số ngày đủ bốn mốc được thống kê riêng. Các chỉ số muộn, về sớm, thiếu mốc có thể cùng xảy ra trong một ngày. Giờ làm chỉ cộng các cặp vào/ra hợp lệ, chưa suy ra tăng ca hay lương. Mở **Cách tính số liệu** trên trang để xem đầy đủ.
+
+API `GET /api/reports/attendance?from=YYYY-MM-DD&to=YYYY-MM-DD&employeeId=...` chỉ dành cho quản trị, trả về tổng, nhóm theo ngày/nhân viên và chi tiết; không lưu cache. Không truyền `employeeId` để tổng hợp toàn hệ thống.
 
 ## Run the whole program (recommended: Docker)
 

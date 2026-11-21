@@ -18,4 +18,11 @@ public record DayResponse(
     Map<String, String> milestones,
     Map<String, String> rawMilestones,
     Long shiftId,
-    boolean workingDaysConfigured) {}
+    boolean workingDaysConfigured,
+    boolean workingDay,
+    boolean present,
+    boolean late,
+    boolean early,
+    boolean missingMilestones,
+    boolean invalidOrder,
+    boolean corrected) {}

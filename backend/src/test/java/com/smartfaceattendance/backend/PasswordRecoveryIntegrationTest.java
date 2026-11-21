@@ -93,6 +93,13 @@ class PasswordRecoveryIntegrationTest {
         .andExpect(status().isForbidden());
   }
 
+  @Test void usernameCaseDoesNotPreventRecovery() throws Exception {
+    var result = request(" recovery ", "EMAIL");
+    String otp = code("EMAIL", "worker@example.test");
+    reset(result.path("requestId").asText(), otp, 200);
+    login(NEW);
+  }
+
   @Test void codeVerificationPrecedesNewPasswordAndOnlyWrongCodesCountAsAttempts() throws Exception {
     var result = request("RECOVERY", "EMAIL");
     String id = result.path("requestId").asText(), code = code("EMAIL", "worker@example.test");

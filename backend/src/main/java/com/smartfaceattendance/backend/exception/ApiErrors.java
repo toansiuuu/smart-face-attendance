@@ -15,14 +15,14 @@ public class ApiErrors {
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ResponseEntity<?> validation(MethodArgumentNotValidException e) {
-    return ResponseEntity.badRequest()
-        .body(
-            Map.of(
-                "message",
-                e.getBindingResult().getFieldErrors().stream()
-                    .map(x -> x.getField() + ": " + x.getDefaultMessage())
-                    .toList()
-                    .toString()));
+    var fields = new java.util.LinkedHashMap<String, String>();
+    e.getBindingResult().getFieldErrors().forEach(error -> fields.putIfAbsent(error.getField(), error.getDefaultMessage()));
+    return ResponseEntity.badRequest().body(Map.of("message", "Dữ liệu không hợp lệ. Vui lòng kiểm tra các trường đã nhập.", "fields", fields));
+  }
+
+  @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+  ResponseEntity<?> tooLarge() {
+    return ResponseEntity.status(413).body(Map.of("message", "Mỗi tệp tối đa 2 MB, tổng yêu cầu tối đa 7 MB."));
   }
 
   @ExceptionHandler(DataIntegrityViolationException.class)

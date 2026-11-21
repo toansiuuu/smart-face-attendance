@@ -1,5 +1,7 @@
 *
 !requirements.txt
+!requirements-test.txt
+!test_*.py
 !service.py
 !identity.py
 !enrollment.py

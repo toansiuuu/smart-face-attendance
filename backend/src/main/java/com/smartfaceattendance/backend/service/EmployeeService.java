@@ -41,7 +41,7 @@ public class EmployeeService {
   }
 
   public static void checkPassword(String p) {
-    if (p.length() < 12 || p.getBytes(StandardCharsets.UTF_8).length > 72)
+    if (p == null || p.isBlank() || p.length() < 12 || p.getBytes(StandardCharsets.UTF_8).length > 72)
       throw new ApiException(
           400, "Password must be at least 12 characters and at most 72 UTF-8 bytes.");
   }
@@ -54,16 +54,24 @@ public class EmployeeService {
   }
 
   static void validatePhone(String phone) {
-    if (phone != null && !phone.isBlank() && !phone.matches("\\d{10,11}"))
-      throw new ApiException(400, "Phone must be 10-11 digits");
+    if (phone != null && !phone.isBlank() && !phone.matches("0\\d{9,10}"))
+      throw new ApiException(400, "Số điện thoại cần 10–11 chữ số và bắt đầu bằng 0.");
+  }
+
+  static void validateName(String name) {
+    if (name == null || name.trim().length() < 2 || name.length() > 150
+        || !name.trim().matches("[\\p{L}\\p{M}][\\p{L}\\p{M} .'-]*"))
+      throw new ApiException(400, "Họ tên cần 2–150 ký tự và chỉ chứa chữ, khoảng trắng, chấm hoặc gạch nối.");
   }
 
   static void validateDob(LocalDate dob) {
     if (dob != null) {
-      if (!dob.isBefore(LocalDate.now()))
+      if (!dob.isBefore(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))))
         throw new ApiException(400, "Date of birth must be in the past");
-      if (Period.between(dob, LocalDate.now()).getYears() < 16)
+      if (Period.between(dob, LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))).getYears() < 16)
         throw new ApiException(400, "Employee must be at least 16 years old");
+      if (Period.between(dob, LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))).getYears() > 120)
+        throw new ApiException(400, "Tuổi nhân viên không được vượt quá 120.");
     }
   }
 
@@ -112,6 +120,9 @@ public class EmployeeService {
   @Transactional
   public EmployeeResponse create(EmployeeRequest r) {
     lockContacts();
+    validateName(r.fullName());
+    if (r.employeeCode() == null || !r.employeeCode().trim().matches("[A-Za-z0-9][A-Za-z0-9_-]{0,31}"))
+      throw new ApiException(400, "Mã nhân viên không hợp lệ.");
     if (r.email() == null || r.email().isBlank())
       throw new ApiException(400, "Email là bắt buộc khi tạo tài khoản nhân viên.");
     checkPassword(r.password());
@@ -148,14 +159,21 @@ public class EmployeeService {
   @Transactional
   public EmployeeResponse update(Long id, EmployeeUpdate r) {
     lockContacts();
+    validateName(r.fullName());
+    if (r.status() == null || !List.of("ACTIVE", "INACTIVE").contains(r.status())) throw new ApiException(400, "Trạng thái không hợp lệ.");
     var e = employees.lockById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
     validatePhone(r.phone());
     validateDob(r.dateOfBirth());
     validateGender(r.gender());
-    checkUniqueContacts(r.email() == null ? e.email : r.email(), r.phone(), id);
+    String email = r.email() == null ? e.email : r.email().trim().toLowerCase(Locale.ROOT);
+    String phone = r.phone() == null || r.phone().isBlank() ? null : r.phone().trim();
+    // Legacy duplicates must not prevent renaming or disabling an employee.
+    // Only a changed contact can introduce a new duplicate.
+    checkUniqueContacts(Objects.equals(email, e.email == null ? null : e.email.trim().toLowerCase(Locale.ROOT)) ? null : email,
+        Objects.equals(phone, e.phone == null || e.phone.isBlank() ? null : e.phone.trim()) ? null : phone, id);
     e.fullName = r.fullName().trim();
     e.status = r.status();
-    e.phone = r.phone();
+    e.phone = phone;
     if (r.email() != null) {
       if (r.email().isBlank()) throw new ApiException(400, "Email không được để trống.");
       e.email = r.email().trim().toLowerCase(Locale.ROOT);
@@ -165,7 +183,7 @@ public class EmployeeService {
     e.gender = r.gender();
     employees.save(e);
     accounts
-        .findByEmployeeId(id)
+        .lockByEmployeeId(id)
         .ifPresent(
             a -> {
               a.enabled = "ACTIVE".equals(r.status());
@@ -179,17 +197,29 @@ public class EmployeeService {
     var e = employees.lockById(id).orElseThrow(() -> new ApiException(404, "Employee not found"));
     if (file.isEmpty()) throw new ApiException(400, "File is empty");
     if (file.getSize() > 2_000_000) throw new ApiException(400, "File exceeds 2MB limit");
-    String ct = file.getContentType();
-    if (ct == null || (!ct.equals("image/jpeg") && !ct.equals("image/png")))
-      throw new ApiException(400, "Only JPEG and PNG are accepted");
-    String ext = ct.equals("image/png") ? ".png" : ".jpg";
     try {
+      byte[] data = file.getBytes();
+      String ext = ImageValidation.type(data).equals("image/png") ? ".png" : ".jpg";
       Path dir = Paths.get(uploadDir, "avatars");
       Files.createDirectories(dir);
-      Path target = dir.resolve(id + ext);
-      file.transferTo(target);
-      e.avatarUrl = "/uploads/avatars/" + id + ext;
-      employees.save(e);
+      String name = id + "-" + UUID.randomUUID() + ext;
+      Path target = dir.resolve(name);
+      Files.write(target, data, StandardOpenOption.CREATE_NEW);
+      String previous = e.avatarUrl;
+      org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+          new org.springframework.transaction.support.TransactionSynchronization() {
+            @Override public void afterCompletion(int status) {
+              try {
+                if (status != STATUS_COMMITTED) Files.deleteIfExists(target);
+                else if (previous != null && previous.matches("/uploads/avatars/[0-9]+(?:-[a-f0-9-]+)?\\.(png|jpg)"))
+                  Files.deleteIfExists(dir.resolve(previous.substring(previous.lastIndexOf('/') + 1)));
+              } catch (IOException cleanup) {
+                org.slf4j.LoggerFactory.getLogger(EmployeeService.class).warn("Avatar cleanup failed");
+              }
+            }
+          });
+      e.avatarUrl = "/uploads/avatars/" + name;
+      employees.saveAndFlush(e);
       return Map.of("avatarUrl", e.avatarUrl);
     } catch (IOException ex) {
       throw new ApiException(500, "Failed to save avatar file");

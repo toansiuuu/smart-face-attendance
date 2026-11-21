@@ -58,4 +58,14 @@ class RecognitionClientTest {
     status = 500;
     assertEquals(503, assertThrows(ApiException.class, () -> client.call("/recognize", image, null)).status);
   }
+
+  @Test void malformedSuccessCannotBeTreatedAsIdentityMatch() {
+    for (String body : new String[] {
+        "{\"accepted\":\"true\",\"externalRef\":\"employee-3\",\"modelVersion\":\"model\"}",
+        "{\"accepted\":true,\"externalRef\":3,\"modelVersion\":\"model\"}",
+        "{\"accepted\":true,\"externalRef\":\"employee-3\"}"}) {
+      response = body;
+      assertEquals(502, assertThrows(ApiException.class, () -> client.call("/recognize", image, null)).status);
+    }
+  }
 }

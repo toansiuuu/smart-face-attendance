@@ -1,4 +1,4 @@
-import {api} from '../api';
+import {api, labels} from '../api';
 import { useRef, useState, useEffect } from 'react';
 
 const FaceCapture = () => {
@@ -42,32 +42,36 @@ const FaceCapture = () => {
     return () => clearInterval(timer);
   }, [screenState, countdown]);
 
-  const capturePhoto = async () => {
-    setError('');
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    if (video && canvas && video.videoWidth > 0) {
-      const context = canvas.getContext('2d');
-      const scale = Math.min(1, 1280 / video.videoWidth);
+  useEffect(() => {
+    if (screenState !== 'SCANNING') return;
+    let disposed = false, busy = false, nextScan = Date.now() + 1000, lastFrame = -1;
+    const controller = new AbortController();
+    const timer = setInterval(async () => {
+      const video = videoRef.current, canvas = canvasRef.current;
+      if (disposed || busy || document.hidden || Date.now() < nextScan || !video || !canvas || video.readyState < 2 || !video.videoWidth || video.currentTime === lastFrame || !video.srcObject?.getVideoTracks().some(track=>track.readyState==='live')) return;
+      lastFrame = video.currentTime; busy = true; setIsLoading(true);
+      try {
+      const scale = Math.min(1, 960 / video.videoWidth);
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Không khởi tạo được khung ảnh. Hãy tải lại trang hoặc thử trình duyệt khác.');
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64Image = canvas.toDataURL('image/jpeg', 0.85);
-      
-      setIsLoading(true);
-      try {
-        const backendData=await api('/diem-danh',{method:'POST',body:{anhKhuonMat:base64Image}});
-        setSuccessData({name:backendData.tenNhanVien,time:backendData.thoiGian,shift:backendData.caLam,message:backendData.trangThai});
-        setCountdown(5);
-        setScreenState('SUCCESS'); 
-      } catch (error) {
-        setError(error.message);
+        const result = await api('/diem-danh', {method:'POST', signal:controller.signal, body:{anhKhuonMat:canvas.toDataURL('image/jpeg',0.85)}});
+        if (disposed) return;
+        clearInterval(timer);
+        setError('');
+        setSuccessData({name:result.tenNhanVien,time:result.thoiGian,shift:labels[result.caLam] || result.caLam,message:result.trangThai});
+        setCountdown(5); setScreenState('SUCCESS');
+      } catch (err) {
+        if (!disposed && err.name !== 'AbortError') setError(err.message);
       } finally {
-        setIsLoading(false);
+        busy = false; nextScan = Date.now() + 2500;
+        if (!disposed) setIsLoading(false);
       }
-    }
-  };
+    }, 300);
+    return () => {disposed = true; clearInterval(timer); controller.abort();};
+  }, [screenState]);
 
   return (
     <div className="flex flex-col justify-center items-center p-4 w-full min-h-screen bg-gray-50">
@@ -99,7 +103,7 @@ const FaceCapture = () => {
             {error && <div className="text-red-500 mb-2 font-medium">{error}</div>}
             
             <div className="relative w-full aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden mb-6 shadow-inner">
-              <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" />
+              <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-48 h-48 border-2 border-white/70 relative">
                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-white"></div>
@@ -112,16 +116,7 @@ const FaceCapture = () => {
 
             <canvas ref={canvasRef} className="hidden" />
 
-            <button 
-              onClick={capturePhoto} 
-              disabled={isLoading}
-              className="bg-blue-50 text-blue-700 font-bold py-3.5 px-8 rounded-full flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm active:scale-95"
-            >
-              {isLoading ? 'Đang phân tích dữ liệu...' : (
-                <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
-                Vui lòng nhìn thẳng vào camera</>
-              )}
-            </button>
+            <p role="status" className="text-blue-700 font-semibold">{isLoading ? 'Đang nhận diện...' : 'Tự động quét — nhìn thẳng và giữ mặt trong khung hình'}</p>
             <p className="text-emerald-600 text-sm mt-4 flex items-center gap-1.5 font-medium">
                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Camera đang bật
             </p>

@@ -1,3 +1,4 @@
+import {passwordError} from '../validation';
 import {useEffect, useState} from 'react';
 import {api} from '../api';
 import Modal from './Modal';
@@ -51,6 +52,7 @@ export default function ForgotPasswordDialog({initialUsername, onClose}) {
 
   async function resetPassword(event) {
     event.preventDefault(); setError('');
+    if (passwordError(password)) {setError(passwordError(password)); return;}
     if (password !== confirm) {setError('Hai mật khẩu mới chưa khớp.'); return;}
     setBusy(true);
     try {

@@ -42,13 +42,14 @@ public class FaceService {
   }
 
   public AttendanceEvent scan(String image) {
+    var capturedAt = attendance.now();
     liveness.requireLive(image);
     var result = recognition.call("/recognize", image, null);
     var face =
         faces
             .findByExternalRefAndActiveTrue(result.get("externalRef"))
             .orElseThrow(() -> new ApiException(422, "Face is not actively enrolled"));
-    return attendance.record(face.employeeId, attendance.now(), null);
+    return attendance.record(face.employeeId, capturedAt, null);
   }
 
   public Object challenge(Long id, String challengeId, String image) {

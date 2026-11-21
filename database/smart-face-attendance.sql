@@ -1,17 +1,7 @@
--- 1. Drop all tables (reverse dependency order)
-DROP TABLE IF EXISTS `leave_requests`;
-DROP TABLE IF EXISTS `correction_requests`;
-DROP TABLE IF EXISTS `attendance_events`;
-DROP TABLE IF EXISTS `face_enrollments`;
-DROP TABLE IF EXISTS `shift_milestones`;
-DROP TABLE IF EXISTS `user_accounts`;
-DROP TABLE IF EXISTS `shifts`;
-DROP TABLE IF EXISTS `employees`;
-DROP TABLE IF EXISTS `holidays`;
-DROP TABLE IF EXISTS `departments`;
+-- Non-destructive bootstrap: keep existing tables/data. Use migrations for existing schema changes.
 
 
-CREATE TABLE `employees` (
+CREATE TABLE IF NOT EXISTS `employees` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_code` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `full_name` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -32,7 +22,7 @@ CREATE TABLE `employees` (
 
 
 -- 2. shifts (no FK dependencies)
-CREATE TABLE `shifts` (
+CREATE TABLE IF NOT EXISTS `shifts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `shift_code` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,
   `shift_name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -43,7 +33,7 @@ CREATE TABLE `shifts` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. user_accounts (FK → employees)
-CREATE TABLE `user_accounts` (
+CREATE TABLE IF NOT EXISTS `user_accounts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_id` bigint DEFAULT NULL,
   `username` varchar(80) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -59,7 +49,7 @@ CREATE TABLE `user_accounts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. face_enrollments (FK → employees)
-CREATE TABLE `face_enrollments` (
+CREATE TABLE IF NOT EXISTS `face_enrollments` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_id` bigint NOT NULL,
   `external_ref` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -73,7 +63,7 @@ CREATE TABLE `face_enrollments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. shift_milestones (FK → shifts)
-CREATE TABLE `shift_milestones` (
+CREATE TABLE IF NOT EXISTS `shift_milestones` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `shift_id` bigint NOT NULL,
   `event_type` enum('MORNING_IN','LUNCH_OUT','AFTERNOON_IN','WORK_OUT') COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -87,7 +77,7 @@ CREATE TABLE `shift_milestones` (
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6. attendance_events (FK → employees, shifts)
-CREATE TABLE `attendance_events` (
+CREATE TABLE IF NOT EXISTS `attendance_events` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_id` bigint NOT NULL,
   `shift_id` bigint NOT NULL,
@@ -104,7 +94,7 @@ CREATE TABLE `attendance_events` (
 
 
 -- 8. correction_requests (FK → employees, shifts, user_accounts)
-CREATE TABLE `correction_requests` (
+CREATE TABLE IF NOT EXISTS `correction_requests` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `employee_id` bigint NOT NULL,
   `shift_id` bigint NOT NULL,
@@ -150,3 +140,18 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 
 CREATE TABLE IF NOT EXISTS employee_contact_guard (id int NOT NULL PRIMARY KEY);
 INSERT INTO employee_contact_guard (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM employee_contact_guard WHERE id = 1);
+
+CREATE TABLE IF NOT EXISTS correction_attachments (
+ id varchar(36) NOT NULL PRIMARY KEY,
+ correction_id bigint NOT NULL,
+ file_name varchar(180) NOT NULL,
+ content_type varchar(80) NOT NULL,
+ content longblob NOT NULL,
+ CONSTRAINT fk_correction_attachment FOREIGN KEY (correction_id) REFERENCES correction_requests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shift_working_day_policy (
+ shift_id bigint NOT NULL PRIMARY KEY,
+ working_days varchar(80) NOT NULL,
+ CONSTRAINT fk_working_day_shift FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE
+);

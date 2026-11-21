@@ -4,4 +4,4 @@ import jakarta.validation.constraints.*;
 import java.time.*;
 
 public record PasswordRequest(
-    @NotBlank String currentPassword, @NotBlank @Size(min = 12, max = 72) String newPassword) {}
+    @NotBlank @Size(max = 72) String currentPassword, @NotBlank @Size(min = 12, max = 72) String newPassword) {}

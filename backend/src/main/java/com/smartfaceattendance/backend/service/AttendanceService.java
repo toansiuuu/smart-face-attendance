@@ -17,7 +17,6 @@ public class AttendanceService {
   private final AttendanceEventRepository events;
   private final CorrectionRepository corrections;
   private final ShiftService shifts;
-  private final Set<DayOfWeek> workingDays;
   private final int grace;
 
   public AttendanceService(
@@ -25,7 +24,6 @@ public class AttendanceService {
       AttendanceEventRepository a,
       CorrectionRepository c,
       ShiftService s,
-      @Value("${app.working-days:}") String days,
       @Value("${app.grace-minutes:0}") int g) {
     employees = e;
     events = a;
@@ -33,9 +31,6 @@ public class AttendanceService {
     shifts = s;
     grace = g;
     if (g < 0) throw new IllegalArgumentException("Grace cannot be negative");
-    workingDays = new HashSet<>();
-    for (String d : days.split(","))
-      if (!d.isBlank()) workingDays.add(DayOfWeek.valueOf(d.trim().toUpperCase()));
   }
 
   public LocalDateTime now() {
@@ -43,7 +38,23 @@ public class AttendanceService {
   }
 
   public boolean policyConfigured() {
-    return !workingDays.isEmpty();
+    return Boolean.TRUE.equals(policy().get("policyConfigured"));
+  }
+
+  public Map<String, Object> policy() {
+    var result = new LinkedHashMap<String, Object>();
+    result.put("timezone", "Asia/Ho_Chi_Minh");
+    Set<DayOfWeek> days = Set.of();
+    try {
+      var shift = shifts.applicable(now().toLocalDate());
+      days = shifts.workingDays(shift.id);
+      result.put("shiftId", shift.id);
+      result.put("shiftName", shift.shiftName);
+    } catch (ApiException e) { if (e.status != 409) throw e; }
+    result.put("workingDays", days.stream().map(DayOfWeek::name).toList());
+    result.put("policyConfigured", !days.isEmpty());
+    result.put("message", days.isEmpty() ? "Chưa chọn ngày làm việc cho lịch hiện tại." : "Đã áp dụng ngày làm việc trong lịch chấm công.");
+    return result;
   }
 
   public Map<String, LocalDateTime> raw(Long id, LocalDate d) {
@@ -85,9 +96,10 @@ public class AttendanceService {
             .orElseThrow(() -> new ApiException(404, "Employee not found"));
     if (!"ACTIVE".equals(e.status)) throw new ApiException(403, "Employee inactive");
     var date = at.toLocalDate();
-    if (policyConfigured() && !workingDays.contains(date.getDayOfWeek()))
-      throw new ApiException(409, "This is not a configured working day");
     var shift = shifts.applicable(date);
+    var workingDays = shifts.workingDays(shift.id);
+    if (!workingDays.isEmpty() && !workingDays.contains(date.getDayOfWeek()))
+      throw new ApiException(409, "Ngày này là ngày nghỉ theo lịch đã cấu hình.");
     var points = shifts.points(shift.id);
     var matches =
         points.stream()
@@ -107,10 +119,10 @@ public class AttendanceService {
       type = matches.get(0).eventType;
     }
     var old = events.findByEmployeeIdAndWorkDateAndEventType(employeeId, date, type);
-    if (old.isPresent())
+    var times = effective(employeeId, date);
+    if (old.isPresent() || times.containsKey(type))
       throw new ApiException(
           409, "This milestone was already recorded; submit a correction if needed.");
-    var times = effective(employeeId, date);
     times.put(type, at);
     if (!AttendanceMath.ordered(times))
       throw new ApiException(409, "Event would reverse milestone order");
@@ -143,12 +155,14 @@ public class AttendanceService {
     } catch (ApiException ex) {
       if (ex.status != 409) throw ex;
     }
+    var workingDays = sid == null ? Set.<DayOfWeek>of() : shifts.workingDays(sid);
+    boolean configured = !workingDays.isEmpty();
     String status = "Đang diễn ra";
     boolean complete = times.size() == 4;
     var now = now();
     if (sid == null) status = "Chưa cấu hình lịch";
     else if (!AttendanceMath.ordered(times)) status = "Sai thứ tự giờ";
-    else if (policyConfigured() && !workingDays.contains(date.getDayOfWeek()) && times.isEmpty())
+    else if (configured && !workingDays.contains(date.getDayOfWeek()) && times.isEmpty())
       status = "Ngày nghỉ";
     else {
       boolean missing =
@@ -176,7 +190,7 @@ public class AttendanceService {
       if (missing)
         status =
             times.isEmpty()
-                ? (policyConfigured() ? "Vắng mặt" : "Chưa có dữ liệu")
+                ? (!configured ? "Chưa có dữ liệu" : points.stream().allMatch(m -> now.isAfter(LocalDateTime.of(date, m.windowEnd))) ? "Vắng mặt" : "Đang diễn ra")
                 : "Thiếu mốc chấm công";
       else if (late) status = "Đi muộn";
       else if (early) status = "Về sớm";
@@ -197,7 +211,8 @@ public class AttendanceService {
         complete,
         shown,
         display(raw(e.id, date)),
-        sid);
+        sid,
+        configured);
   }
 
   public List<DayResponse> report(Long employeeId, LocalDate from, LocalDate to) {

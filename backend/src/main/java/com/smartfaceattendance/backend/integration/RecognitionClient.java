@@ -49,6 +49,9 @@ public class RecognitionClient {
   }
 
   private Map<String, String> accepted(JsonNode json) {
+    if (json == null || !json.path("accepted").isBoolean() || !json.path("externalRef").isTextual()
+        || !json.path("modelVersion").isTextual() || json.path("modelVersion").asText().isBlank())
+      throw new ApiException(502, "Invalid recognition response");
     if (!json.path("accepted").asBoolean(false) || json.path("externalRef").asText().isBlank())
       throw new ApiException(422, "No accepted face match/enrollment");
     String ref = json.path("externalRef").asText(), version = json.path("modelVersion").asText("");

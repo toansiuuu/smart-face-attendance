@@ -1,7 +1,8 @@
+import {employeeErrors, nameError} from '../validation';
 import SchedulePanel from './SchedulePanel';
 import PasswordDialog from './PasswordDialog';
 import FaceEnrollmentDialog from './FaceEnrollmentDialog';
-import {api,allPages,localDay,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,logout} from '../api';
+import {api,allPages,localDay,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,logout,summarizeAttendance} from '../api';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
@@ -29,6 +30,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
   // Modal Thêm nhân viên
   const [showAddEmpModal, setShowAddEmpModal] = useState(false);
   const [isSubmittingEmp, setIsSubmittingEmp] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [employeeSaveError, setEmployeeSaveError] = useState(null);
   const [showEmpPassword, setShowEmpPassword] = useState(false);
 
   // State Tìm kiếm & Lọc
@@ -61,6 +64,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
   const [employees,setEmployees]=useState([]);
 
   const [records,setRecords]=useState([]);
+  const attendanceTotals = summarizeAttendance(records);
 
   const [requests,setRequests]=useState([]);
 
@@ -94,10 +98,33 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
   const filteredRequests = requests.filter(req => req.status === reqSubTab);
 
   // ================= CÁC HÀM XỬ LÝ =================
-  const handleAction=async(action,id)=>{try{setApiError('');const note=window.prompt('Ghi chú xét duyệt (không bắt buộc):','');if(note===null)return;await api(`/corrections/${id}/review`,{method:'POST',body:{approve:action==='Duyệt',note}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const handleAddEmployee=async(e)=>{e.preventDefault();setIsSubmittingEmp(true);setApiError('');const data=new FormData(e.currentTarget);try{await api('/employees',{method:'POST',body:{employeeCode:data.get('employeeCode'),fullName:data.get('fullName'),password:data.get('password'),phone:data.get('phone')||null,email:data.get('email')||null,position:data.get('position')||null,dateOfBirth:data.get('dateOfBirth')||null,gender:data.get('gender')||null}});setShowAddEmpModal(false);setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmittingEmp(false);}};
+  const handleAction=async(action,id)=>{try{setApiError('');const note=window.prompt('Ghi chú xét duyệt (không bắt buộc):','');if(note===null)return;if(note.length>500){setApiError('Ghi chú không được vượt quá 500 ký tự.');return;}await api(`/corrections/${id}/review`,{method:'POST',body:{approve:action==='Duyệt',note}});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const handleAddEmployee = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const errors = employeeErrors(Object.fromEntries(data), employees);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+    setIsSubmittingEmp(true);
+    setEmployeeSaveError(null);
+    try {
+      await api('/employees', {method: 'POST', body: {
+        employeeCode: data.get('employeeCode').trim(), fullName: data.get('fullName').trim(),
+        password: data.get('password'), phone: data.get('phone') || null,
+        email: data.get('email').trim() || null, position: data.get('position') || null,
+        dateOfBirth: data.get('dateOfBirth') || null, gender: data.get('gender') || null
+      }});
+      setShowAddEmpModal(false);
+      setReload(x => x + 1);
+    } catch (error) {
+      setEmployeeSaveError(error);
+      if (error.fields) setFieldErrors(error.fields);
+    } finally {
+      setIsSubmittingEmp(false);
+    }
+  };
   const empPatchBody=(emp,overrides={})=>({fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',phone:emp.phone||null,email:emp.email||null,position:emp.position||null,dateOfBirth:emp.dateOfBirth||null,gender:emp.gender||null,...overrides});
-  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{fullName:name})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;if(nameError(name)){setApiError(nameError(name));return;}try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{fullName:name.trim()})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
   const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
 
   const handleExportExcel = async () => {
@@ -139,7 +166,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
   // ================= CÁC COMPONENT RENDER =================
   const renderSummaryCards = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 animate-fade-in">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5">
         <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg></div>
         <div>
@@ -168,6 +195,13 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
             {isLoading ? <div className="h-8 w-10 bg-gray-200 animate-pulse rounded"></div> : <p className="text-3xl font-black text-gray-800">{requests.filter(r => r.status === 'PENDING').length}</p>}
             <span className="text-sm text-gray-400">yêu cầu</span>
           </div>
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5">
+        <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-600 shrink-0 font-bold">V</div>
+        <div><p className="text-sm text-gray-500 font-medium mb-1">Ngày vắng trong tháng</p>
+          <p className="text-3xl font-black text-gray-800">{isLoading?'…':attendanceTotals.total>0 && attendanceTotals.unconfigured===attendanceTotals.total?'—':attendanceTotals.absent}</p>
+          <p className="text-xs text-gray-500 mt-1">{attendanceTotals.unconfigured>0?'Đã xác định; '+attendanceTotals.unconfigured+' lượt ngày chưa cấu hình':'Lượt ngày–nhân viên; không gồm ngày nghỉ'}</p>
         </div>
       </div>
     </div>
@@ -313,7 +347,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
     <div className="mb-8 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-2xl font-bold text-gray-800">Hồ sơ nhân viên</h3>
-        <button onClick={() => setShowAddEmpModal(true)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm active:scale-95">
+        <button onClick={() => {setEmployeeSaveError(null); (setFieldErrors({}), setShowAddEmpModal(true));}} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2 shadow-sm active:scale-95">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>Thêm nhân viên
         </button>
       </div>
@@ -419,9 +453,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <p className="text-sm font-bold text-gray-800">Tệp đính kèm (Minh chứng)</p>
                   <p className="text-xs text-gray-500 mt-0.5">Hình ảnh hoặc ghi chú tùy chọn</p>
                 </div>
-                <button disabled title="Chưa hỗ trợ tệp đính kèm" className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${req.attachments > 0 ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed'}`}>
-                  {req.attachments} Tệp đính kèm
-                </button>
+                <div className="flex flex-wrap gap-2">{(req.attachmentFiles || []).map(file => <a key={file.id} href={file.url} className="text-blue-700 underline text-sm" download>{file.name}</a>)}{!req.attachments && <span className="text-gray-400 text-sm">Không có tệp đính kèm</span>}</div>
               </div>
 
               <div className="flex gap-3">
@@ -497,8 +529,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
         <div className="p-8 max-w-7xl mx-auto w-full"><div className="mb-4 flex gap-3"><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
           {apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3 mb-3">{apiError}</p>}
-          {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa xác nhận ngày làm việc. Chưa tính tổng ngày vắng.</p>}
-          {activeTab === 'CAU_HINH_LICH' && <SchedulePanel/>}
+          {!policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa chọn ngày làm việc cho lịch hiện tại. <button type="button" className="font-semibold text-blue-700 underline" onClick={()=>setActiveTab('CAU_HINH_LICH')}>Mở cấu hình lịch</button> để bật tính ngày vắng.</p>}
+          {activeTab === 'CAU_HINH_LICH' && <SchedulePanel onSaved={()=>setReload(value=>value+1)}/>}
           {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}
           {activeTab === 'NHAN_VIEN' && <div className="animate-fade-in">{renderEmployeesTable()}</div>}
@@ -518,16 +550,24 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
               <button onClick={() => setShowAddEmpModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
             </div>
             
-            <form onSubmit={handleAddEmployee} className="p-6">{apiError&&<p className="text-red-600" role="alert">{apiError}</p>}<p className="text-sm mb-3">Tên đăng nhập = Mã NV. Mật khẩu tối thiểu 12 ký tự.</p>
+            <form noValidate onSubmit={handleAddEmployee} onChange={e=>{const form=e.currentTarget;setFieldErrors(employeeErrors(Object.fromEntries(new FormData(form)), employees));}} className="p-6">
+              {employeeSaveError && <p className="text-red-600 mb-2" role="alert">
+                {employeeSaveError.status === 401 ? <>
+                  Phiên đăng nhập không còn hiệu lực. <a href="/login" target="_blank" rel="noopener noreferrer" className="underline">Đăng nhập lại bằng tài khoản quản lý trong tab mới</a>, rồi quay lại đây và bấm Lưu hồ sơ.
+                </> : employeeSaveError.message}
+              </p>}
+              <p className="text-sm mb-3">Tên đăng nhập = Mã NV. Mật khẩu tối thiểu 12 ký tự.</p>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Họ và Tên</label>
                     <input type="text" name="fullName" required maxLength={150} placeholder="VD: Nguyễn Văn A" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.fullName && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.fullName}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Mã NV</label>
                     <input type="text" name="employeeCode" required maxLength={32} placeholder="VD: NV006" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.employeeCode && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.employeeCode}</p>}
                   </div>
                 </div>
                 
@@ -535,6 +575,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Số điện thoại</label>
                     <input type="text" name="phone" maxLength={11} placeholder="VD: 0901234567" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.phone && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.phone}</p>}
                   </div>
                 </div>
 
@@ -542,10 +583,12 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
                     <input type="email" name="email" required maxLength={255} placeholder="Email bắt buộc, VD: nva@company.com" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.email && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.email}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Chức vụ</label>
                     <input type="text" name="position" maxLength={100} placeholder="VD: Nhân viên" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.position && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.position}</p>}
                   </div>
                 </div>
 
@@ -553,6 +596,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Ngày sinh</label>
                     <input type="date" name="dateOfBirth" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500" />
+                    {fieldErrors.dateOfBirth && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.dateOfBirth}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Giới tính</label>
@@ -569,6 +613,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Mật khẩu đăng nhập</label>
                   <div className="relative">
                     <input type={showEmpPassword ? "text" : "password"} name="password" minLength={12} required placeholder="Nhập mật khẩu cho nhân viên..." className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 pr-12" />
+                    {fieldErrors.password && <p role="alert" className="text-xs text-red-600 mt-1">{fieldErrors.password}</p>}
                     <button type="button" onClick={() => setShowEmpPassword(!showEmpPassword)} className="absolute right-4 top-2.5 text-gray-400 hover:text-gray-600 focus:outline-none">
                       {showEmpPassword ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>}
                     </button>

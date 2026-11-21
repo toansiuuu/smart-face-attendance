@@ -30,7 +30,8 @@ Postman automatically retains cookies when using the same host. Import `postman_
 | POST /employees | Manager | employeeCode, fullName, password; creates employee + EMPLOYEE account |
 | PATCH /employees/{id} | Manager | fullName, status ACTIVE/INACTIVE |
 | GET /shifts | Manager | Shared schedule versions and milestones |
-| POST /shifts | Manager | shiftCode, shiftName, effectiveFrom, four milestones |
+| POST /shifts | Manager | shiftCode, shiftName, effectiveFrom, four milestones, workingDays (1–7 distinct ISO weekday names) |
+| PUT /shifts/{id}/working-days | Manager | Initial weekday setup for a legacy schedule: workingDays |
 | GET /attendance?from=YYYY-MM-DD&to=YYYY-MM-DD | Account | Manager can filter employeeId; employee is always scoped to self |
 | GET /policy | Account | Whether working weekdays are configured |
 | GET /corrections | Account | All for manager; own for employee |
@@ -159,3 +160,27 @@ it does not recreate existing application tables.
 See the README's recovery section and `.env.example` for setup.
 
 The launcher does not supply a local inbox. Configure SMTP to deliver to the employee profile contact. There is no admin destination fallback.
+
+## Correction schedule and attachments
+
+`GET /api/corrections/options?workDate=YYYY-MM-DD` is employee-only and returns the historically applicable shiftId, shiftName and milestones (eventType, targetTime, recordedTime, pending, available). Dates must be between employee creation and today.
+
+`POST /api/corrections` accepts existing JSON or multipart/form-data: request is an application/json part with the same correction fields, files contains up to three PNG/JPEG/PDF parts (2,000,000 bytes each). It creates request and files in one transaction. Attachment metadata is returned as attachmentFiles and the attachments count.
+
+`GET /api/corrections/{id}/attachments/{attachmentId}` requires the request owner or a manager. Files are sent as downloads with nosniff/no-store; they have no public upload path. Wrong file signatures, invalid images or oversized images/files are rejected. Oversized multipart requests return 413.
+
+Invalid request fields return HTTP 400 with message and a fields object keyed by field name; uniqueness conflicts return 409.
+
+## Working weekdays per schedule version
+
+New schedules require workingDays, a list of 1–7 distinct MONDAY … SUNDAY values. GET /shifts includes workingDays, workingDaysSaved and workingDaysConfigured. Stored days take precedence over the legacy WORKING_DAYS environment fallback.
+
+PUT /shifts/{id}/working-days accepts {"workingDays":["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]}. It is manager-only, CSRF-protected, and can fill an existing schedule that has never saved days; repeat writes return 409. A changed saved pattern must use a new future-effective schedule version. Initial setup intentionally classifies dates from the legacy version's effective date.
+
+GET /policy reports the current effective schedule's weekdays and readiness. Reports resolve weekdays from the same historical shift version as attendance data. Empty days stay unclassified, unselected weekdays have status Ngày nghỉ when empty, and Vắng mặt requires a working weekday, no effective scans and all scan windows closed. Live scans on unselected weekdays return 409.
+
+Correction milestone options also include suggestedTime. A milestone is available when its scan window has opened or it already has effective data; it does not require the standard target time to have passed. Suggested time is the effective recorded time when available, otherwise the target time capped at current business time. Proposed correction times may be earlier or later than raw scans, including after the normal scan window; they must not be in the future. Date-before-employment and future-time errors are reported separately. Raw attendance remains unchanged; approval overlays the proposed time in effective reports.
+
+Attendance rows additionally return workingDaysConfigured for their historical shift version. Monthly summaries must use this per-row readiness rather than /policy (which describes today). A raw scan is rejected if that milestone already has either a raw event or an approved effective correction. The server timestamps scans before inference so model latency does not move them into another scan window.
+
+Password changes lock and revalidate the authenticated account inside the transaction; account status updates use the same account row lock. Clients treat 401 from protected APIs as session expiry, preserve AbortError cancellation and never automatically retry mutations. Avatar uploads validate decoded PNG/JPEG content and dimensions rather than trusting the provided MIME type.

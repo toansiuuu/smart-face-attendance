@@ -73,7 +73,7 @@ public class PasswordRecoveryService {
           || resets.countByRequesterHashAndCreatedAtAfter(source, now.minusHours(1)) >= 10)
         throw new ApiException(429, "Bạn đã yêu cầu quá nhiều lần. Vui lòng chờ rồi thử lại.");
 
-      var account = accounts.findByUsername(body.username().trim()).orElse(null);
+      var account = accounts.findByUsernameIgnoreCase(body.username().trim()).orElse(null);
       String contact = account == null ? "" : destination(account);
       boolean matched = account != null && active(account) && !contact.isBlank();
       String code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));

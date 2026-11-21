@@ -25,9 +25,13 @@ public class EmployeeContactConstraints implements ApplicationRunner {
       boolean exists = false;
       try (var connection = source.getConnection();
           var indexes = connection.getMetaData().getIndexInfo(connection.getCatalog(), null, "employees", true, false)) {
+        var columns = new java.util.HashMap<String, java.util.Set<String>>();
         while (indexes.next()) {
-          if (index.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) exists = true;
+          String name = indexes.getString("INDEX_NAME"), indexedColumn = indexes.getString("COLUMN_NAME");
+          if (name != null && indexedColumn != null)
+            columns.computeIfAbsent(name, key -> new java.util.HashSet<>()).add(indexedColumn.toLowerCase(java.util.Locale.ROOT));
         }
+        exists = columns.values().stream().anyMatch(value -> value.size() == 1 && value.contains(column));
       }
       if (exists) continue;
       // Check first: existing duplicates need an explicit administrative correction.

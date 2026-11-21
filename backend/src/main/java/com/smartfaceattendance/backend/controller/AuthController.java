@@ -41,7 +41,7 @@ public class AuthController {
       @Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
     var a =
         accounts
-            .findByUsername(body.username())
+            .findByUsernameIgnoreCase(body.username().trim())
             .orElseThrow(() -> new ApiException(401, "Invalid username or password"));
     if (!a.enabled || !encoder.matches(body.password(), a.passwordHash))
       throw new ApiException(401, "Invalid username or password");
@@ -77,8 +77,9 @@ public class AuthController {
   }
 
   @PostMapping("/password")
+  @org.springframework.transaction.annotation.Transactional
   public Object password(@Valid @RequestBody PasswordRequest body, HttpServletRequest req) {
-    var a = identity.current();
+    var a = identity.currentLocked();
     if (!encoder.matches(body.currentPassword(), a.passwordHash))
       throw new ApiException(400, "Current password incorrect");
     EmployeeService.checkPassword(body.newPassword());

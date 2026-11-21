@@ -124,3 +124,18 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 
 CREATE TABLE IF NOT EXISTS employee_contact_guard (id int NOT NULL PRIMARY KEY);
 INSERT INTO employee_contact_guard (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM employee_contact_guard WHERE id = 1);
+
+CREATE TABLE IF NOT EXISTS correction_attachments (
+ id varchar(36) NOT NULL PRIMARY KEY,
+ correction_id bigint NOT NULL,
+ file_name varchar(180) NOT NULL,
+ content_type varchar(80) NOT NULL,
+ content longblob NOT NULL,
+ CONSTRAINT fk_correction_attachment FOREIGN KEY (correction_id) REFERENCES correction_requests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shift_working_day_policy (
+ shift_id bigint NOT NULL PRIMARY KEY,
+ working_days varchar(80) NOT NULL,
+ CONSTRAINT fk_working_day_shift FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE
+);

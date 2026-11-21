@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+import sqlite3
 from unittest.mock import patch
 
 import cv2
@@ -66,6 +67,19 @@ class IdentityTests(unittest.TestCase):
             db.execute("INSERT INTO identities VALUES (1, 'employee-1', 'old-model', ?)", (self.a.tobytes(),))
         with self.assertRaises(RuntimeError):
             IdentityEngine(self.database)
+
+    def test_connections_close_after_each_gallery_operation(self):
+        with self.engine.connect() as db:
+            self.assertEqual(db.execute("SELECT 1").fetchone()[0], 1)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            db.execute("SELECT 1")
+
+    def test_invalid_and_overflowed_embeddings_are_not_accepted(self):
+        with np.errstate(over="ignore", invalid="ignore"):
+            for feature in [np.zeros(128, dtype=np.float32), np.full(128, np.nan, dtype=np.float32), np.full(128, 1e38, dtype=np.float32)]:
+                with self.assertRaises(HTTPException) as error:
+                    self.engine.normalize(feature)
+                self.assertEqual(error.exception.status_code, 503)
 
     def test_actual_sface_model_produces_embedding_and_rejects_blank_detection(self):
         feature = self.engine.recognizer.feature(np.full((112, 112, 3), 127, dtype=np.uint8))

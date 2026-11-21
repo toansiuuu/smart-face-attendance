@@ -17,18 +17,20 @@ public class ManagementController {
   private final ShiftService shifts;
   private final AttendanceService attendance;
   private final CorrectionService corrections;
+  private final CorrectionAttachments attachments;
 
   public ManagementController(
       IdentityService i,
       EmployeeService e,
       ShiftService s,
       AttendanceService a,
-      CorrectionService c) {
+      CorrectionService c, CorrectionAttachments attachments) {
     identity = i;
     employees = e;
     shifts = s;
     attendance = a;
     corrections = c;
+    this.attachments = attachments;
   }
 
   public static <T> Map<String, Object> page(List<T> data, int page, int size) {
@@ -100,6 +102,12 @@ public class ManagementController {
     return shifts.create(r);
   }
 
+  @PutMapping("/shifts/{id}/working-days")
+  public Object configureWorkingDays(@PathVariable Long id, @Valid @RequestBody WorkingDaysRequest request) {
+    identity.manager();
+    return shifts.configureDays(id, request);
+  }
+
   @GetMapping("/attendance")
   public Object attendance(
       @RequestParam LocalDate from,
@@ -115,15 +123,7 @@ public class ManagementController {
   @GetMapping("/policy")
   public Object policy() {
     identity.current();
-    return Map.of(
-        "policyConfigured",
-        attendance.policyConfigured(),
-        "timezone",
-        "Asia/Ho_Chi_Minh",
-        "message",
-        attendance.policyConfigured()
-            ? "Configured working weekdays"
-            : "Working weekdays not configured; absence totals are unavailable");
+    return attendance.policy();
   }
 
   @GetMapping("/corrections")
@@ -132,7 +132,30 @@ public class ManagementController {
     return page(corrections.list(identity.current()), page, size);
   }
 
-  @PostMapping("/corrections")
+  @GetMapping("/corrections/options")
+  public Object correctionOptions(@RequestParam LocalDate workDate) {
+    return corrections.options(identity.employee(), workDate);
+  }
+
+  @PostMapping(value = "/corrections", consumes = "multipart/form-data")
+  @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+  public Object requestWithFiles(@Valid @RequestPart("request") CorrectionRequest request,
+      @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+    return corrections.create(identity.employee(), request, files == null ? List.of() : files);
+  }
+
+  @GetMapping("/corrections/{id}/attachments/{attachmentId}")
+  public org.springframework.http.ResponseEntity<byte[]> attachment(@PathVariable Long id, @PathVariable String attachmentId) {
+    var file = attachments.download(identity.current(), id, attachmentId);
+    return org.springframework.http.ResponseEntity.ok()
+        .header("Content-Disposition", org.springframework.http.ContentDisposition.attachment()
+            .filename(file.name(), java.nio.charset.StandardCharsets.UTF_8).build().toString())
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cache-Control", "no-store")
+        .contentType(org.springframework.http.MediaType.parseMediaType(file.type())).body(file.data());
+  }
+
+  @PostMapping(value = "/corrections", consumes = "application/json")
   @ResponseStatus(org.springframework.http.HttpStatus.CREATED)
   public Object request(@Valid @RequestBody CorrectionRequest r) {
     return corrections.create(identity.employee(), r);

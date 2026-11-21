@@ -1,5 +1,5 @@
 import PasswordDialog from './PasswordDialog';
-import {api,allPages,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,eventType,logout} from '../api';
+import {api,allPages,currentMonth,months,monthRange,attendanceRow,correctionRow,labels,eventType,logout,localDay} from '../api';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -22,14 +22,33 @@ const EmployeeDashboard = () => {
 
   // Modal State cho Form Gửi Yêu Cầu mới
   const [showModal, setShowModal] = useState(false);
-  const [modalData, setModalData] = useState({ 
-    date: '', 
-    scanType: 'Giờ ra (Chiều)', 
-    currentRecord: '— (Trống)', 
-    requestedTime: '', 
-    reason: '' 
+  const [modalData, setModalData] = useState({
+    date: '',
+    scanType: 'Giờ ra (Chiều)',
+    currentRecord: '— (Trống)',
+    requestedTime: '',
+    reason: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [scheduleOptions, setScheduleOptions] = useState([]);
+  const [scheduleName, setScheduleName] = useState('');
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState('');
+  useEffect(() => {
+    if (!showModal || !modalData.date) return;
+    let active = true;
+    const controller = new AbortController();
+    Promise.resolve().then(() => {if (active) {setScheduleLoading(true); setScheduleError(''); setScheduleOptions([]); setScheduleName('');}
+      return api('/corrections/options?workDate=' + modalData.date, {signal:controller.signal});
+    }).then(result => {
+      if (!active) return;
+      setScheduleOptions(result.milestones); setScheduleName(result.shiftName);
+      const selected = result.milestones.find(m => m.available && !m.pending && m.recordedTime === '—') || result.milestones.find(m => m.available && !m.pending);
+      setModalData(value => ({...value, scanType:selected ? labels[selected.eventType] : '', requestedTime:(selected?.suggestedTime || selected?.targetTime)?.slice(0,5) || ''}));
+    }).catch(err => {if (active) setScheduleError(err.message);}).finally(() => {if (active) setScheduleLoading(false);});
+    return () => {active = false; controller.abort();};
+  }, [showModal, modalData.date]);
 
   const headerRef = useRef(null);
   useEffect(() => {
@@ -61,23 +80,28 @@ const EmployeeDashboard = () => {
 
   const handleOpenModal = (dateStr = '') => {
     // Chuyển format DD/MM/YYYY thành YYYY-MM-DD để nhét vào thẻ <input type="date">
-    let formattedDate = '';
+    let formattedDate = localDay();
     if (dateStr) {
       const [d, m, y] = dateStr.split('/');
       formattedDate = `${y}-${m}-${d}`;
     }
-    setModalData({ 
-      date: formattedDate, 
-      scanType: 'Giờ ra (Chiều)', 
-      currentRecord: '— (Trống)', 
-      requestedTime: '', 
-      reason: '' 
+    setModalData({
+      date: formattedDate,
+      scanType: 'Giờ ra (Chiều)',
+      currentRecord: '— (Trống)',
+      requestedTime: '',
+      reason: ''
     });
-    setShowModal(true);
+    setFiles([]); setApiError(''); setShowModal(true);
   };
 
-  const handleSubmitRequest=async(e)=>{e.preventDefault();setIsSubmitting(true);setApiError('');try{await api('/corrections',{method:'POST',body:{workDate:modalData.date,eventType:eventType(modalData.scanType),requestedTime:modalData.requestedTime,reason:modalData.reason}});setShowModal(false);setActiveTab('YEU_CAU');setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmitting(false);}};
-  const currentRecord=history.find(r=>r.date===modalData.date.split('-').reverse().join('/'))?.milestones?.[eventType(modalData.scanType)]||'—';
+  const handleSubmitRequest=async(e)=>{e.preventDefault();setIsSubmitting(true);setApiError('');try{if (scheduleLoading || scheduleError || !modalData.scanType) throw new Error('Vui lòng chọn mốc chấm công hợp lệ.');
+      if(modalData.reason.trim().length<5) throw new Error('Lý do cần ít nhất 5 ký tự.');
+      const body = new FormData();
+      body.append('request', new Blob([JSON.stringify({workDate:modalData.date,eventType:eventType(modalData.scanType),requestedTime:modalData.requestedTime,reason:modalData.reason.trim()})], {type:'application/json'}));
+      files.forEach(file=>body.append('files',file));
+      await api('/corrections',{method:'POST',body});setShowModal(false);setActiveTab('YEU_CAU');setReload(x=>x+1);}catch(error){setApiError(error.message);}finally{setIsSubmitting(false);}};
+  const currentRecord=scheduleOptions.find(m=>labels[m.eventType]===modalData.scanType)?.recordedTime || '—';
 
   const renderStatusBadge = (status) => {
     const baseClass = "px-3 py-1.5 rounded-md text-[13px] font-bold inline-block text-center w-[110px] whitespace-nowrap shadow-sm";
@@ -95,7 +119,7 @@ const EmployeeDashboard = () => {
 
   return (
     <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden font-sans">
-      
+
       {/* SIDEBAR */}
       <div className="w-64 bg-[#111827] text-slate-300 flex flex-col h-full shrink-0">
         <div className="p-5 flex items-center gap-3 border-b border-slate-700/50 mb-4">
@@ -144,7 +168,7 @@ const EmployeeDashboard = () => {
         </header><div className="px-8 pt-3">{apiError&&<p role="alert" className="bg-red-50 text-red-700 p-3">{apiError}</p>}<p className="text-sm text-gray-500">{user?.name} · {policy?.message}</p><button onClick={()=>setReload(x=>x+1)}>Làm mới</button></div>
 
         <div className="p-8 max-w-7xl mx-auto w-full">
-          
+
           {/* TAB 1: TỔNG QUAN (GIỮ NGUYÊN) */}
           {activeTab === 'TONG_QUAN' && (
             <div className="animate-fade-in">
@@ -165,7 +189,7 @@ const EmployeeDashboard = () => {
                   </tbody>
                 </table>
               </div>
-              
+
               <div className="bg-[#f0f9ff] rounded-2xl p-6 flex justify-between items-center border border-blue-100 animate-fade-in">
                 <div className="flex items-center gap-4"><div className="w-12 h-12 bg-blue-500 text-white rounded-xl flex items-center justify-center"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></div><div><h4 className="text-base font-bold text-gray-800">Gửi yêu cầu chỉnh sửa chấm công</h4><p className="text-sm text-gray-500 mt-0.5">Gửi yêu cầu để quản lý xem xét nếu có sai sót.</p></div></div>
                 <button onClick={() => handleOpenModal()} className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors active:scale-95 shadow-sm"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>Gửi yêu cầu chỉnh sửa</button>
@@ -211,7 +235,7 @@ const EmployeeDashboard = () => {
                 <tbody className="divide-y divide-gray-50">
                   {requests.map((req) => (
                     <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 text-sm text-gray-500">{req.submitTime}</td><td className="p-4 text-sm text-gray-800 font-medium">{req.dateTarget}</td><td className="p-4 text-sm text-gray-600">{req.reason}{req.reviewNote&&<p className="mt-2 text-blue-700">Ghi chú quản lý: {req.reviewNote}</p>}</td><td className="p-4 text-center">{renderStatusBadge(req.status)}</td>
+                      <td className="p-4 text-sm text-gray-500">{req.submitTime}</td><td className="p-4 text-sm text-gray-800 font-medium">{req.dateTarget}</td><td className="p-4 text-sm text-gray-600">{req.reason}{(req.attachmentFiles||[]).map(file=><a key={file.id} href={file.url} download className="block text-blue-700 underline">{file.name}</a>)}{req.reviewNote&&<p className="mt-2 text-blue-700">Ghi chú quản lý: {req.reviewNote}</p>}</td><td className="p-4 text-center">{renderStatusBadge(req.status)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -232,86 +256,88 @@ const EmployeeDashboard = () => {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
-            
-            <form onSubmit={handleSubmitRequest} className="p-6 overflow-y-auto">{apiError&&<p className="text-red-600" role="alert">{apiError}</p>}<p className="text-sm text-amber-700">Tệp đính kèm chưa được hỗ trợ lưu.</p>
+
+            <form onSubmit={handleSubmitRequest} className="p-6 overflow-y-auto">{apiError&&<p className="text-red-600" role="alert">{apiError}</p>}{scheduleLoading && <p role="status">Đang tải lịch áp dụng...</p>}{scheduleError && <p role="alert" className="text-red-600">{scheduleError}</p>}{scheduleName && !scheduleLoading && <p className="text-sm text-blue-700 mb-3">Lịch áp dụng: {scheduleName}. Chọn mốc để gợi ý giờ; điền giờ thực tế cần chỉnh sửa.</p>}
               <div className="space-y-5">
                 {/* Hàng 1: Ngày chấm công & Loại chấm công */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ngày chấm công</label>
                     <div className="relative">
-                      <input 
-                        type="date" required 
-                        value={modalData.date} 
-                        onChange={(e) => setModalData({...modalData, date: e.target.value})} 
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-700 font-medium" 
+                      <input
+                        type="date" required max={localDay()}
+                        value={modalData.date}
+                        onChange={(e) => {setModalData({...modalData,date:e.target.value,scanType:'',requestedTime:''});setScheduleLoading(true);setScheduleOptions([]);}}
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-700 font-medium"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại chấm công</label>
-                    <select 
-                      value={modalData.scanType} 
-                      onChange={(e) => setModalData({...modalData, scanType: e.target.value})} 
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ca / mốc cần bổ sung</label>
+                    <select
+                      value={modalData.scanType}
+                      required disabled={scheduleLoading || !!scheduleError} onChange={(e) => {const chosen=scheduleOptions.find(m=>labels[m.eventType]===e.target.value);setModalData({...modalData,scanType:e.target.value,requestedTime:(chosen?.suggestedTime || chosen?.targetTime)?.slice(0,5)||''});}}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-700 font-medium"
                     >
-                      <option>Giờ vào (Sáng)</option>
-                      <option>Giờ ra (Trưa)</option>
-                      <option>Giờ vào (Chiều)</option>
-                      <option>Giờ ra (Chiều)</option>
+                      <option value="">Chọn mốc theo lịch</option>
+                      {scheduleOptions.map(m=><option key={m.eventType} value={labels[m.eventType]} disabled={!m.available || m.pending}>{labels[m.eventType]} · {m.targetTime.slice(0,5)}{m.pending?' · Đang chờ duyệt':!m.available?' · Chưa mở cửa sổ':m.recordedTime==='—'?' · Chưa có dữ liệu': ' · Đã ghi nhận'}</option>)}
                     </select>
                   </div>
                 </div>
 
+                <p className="text-sm text-blue-800">Giờ đề xuất có thể sớm hoặc muộn hơn giờ đã quét. Nếu đã quét ra rồi quay lại làm và quên quét, nhập giờ ra cuối cùng thực tế để quản lý duyệt. Không chọn thời điểm chưa xảy ra.</p>
                 {/* Hàng 2: Dữ liệu hiện tại & Giờ đề xuất */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">Dữ liệu hiện tại</label>
-                    <input 
-                      type="text" 
-                      readOnly 
-                      value={currentRecord} 
-                      className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed font-bold" 
+                    <input
+                      type="text"
+                      readOnly
+                      value={currentRecord}
+                      className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl outline-none text-sm text-gray-500 cursor-not-allowed font-bold"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">Giờ đề xuất</label>
-                    <input 
-                      type="time" 
-                      value={modalData.requestedTime} 
-                      onChange={(e) => setModalData({...modalData, requestedTime: e.target.value})} 
-                      required 
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-700 font-bold text-center" 
+                    <input
+                      type="time"
+                      value={modalData.requestedTime}
+                      onChange={(e) => setModalData({...modalData, requestedTime: e.target.value})}
+                      required
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-700 font-bold text-center"
                     />
                   </div>
                 </div>
 
+                {modalData.requestedTime && <p className="text-xs text-gray-600">Giờ đề xuất theo định dạng 24 giờ: <strong>{modalData.requestedTime}</strong> (giờ Việt Nam).</p>}
                 {/* Hàng 3: Lý do */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Lý do</label>
-                  <textarea 
-                    required 
-                    rows="3" 
-                    value={modalData.reason} 
-                    onChange={(e) => setModalData({...modalData, reason: e.target.value})} 
-                    placeholder="VD: Tôi đã quét khuôn mặt cuối ca nhưng hệ thống không ghi nhận..." 
+                  <textarea
+                    required
+                    minLength={5} maxLength={4000} rows="3"
+                    value={modalData.reason}
+                    onChange={(e) => setModalData({...modalData, reason: e.target.value})}
+                    placeholder="VD: Tôi đã quét khuôn mặt cuối ca nhưng hệ thống không ghi nhận..."
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-none text-gray-700"
                   ></textarea>
                 </div>
 
+                {files.length > 0 && <ul className="text-sm space-y-1">{files.map((file,index)=><li key={index} className="flex justify-between gap-2"><span>{file.name}</span><button type="button" className="text-red-600" onClick={()=>setFiles(current=>current.filter((_,i)=>i!==index))}>Bỏ tệp</button></li>)}</ul>}
                 {/* Hàng 4: Upload Tệp */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tệp đính kèm (Tùy chọn)</label>
-                  <input 
-                    type="file" disabled title="Tệp đính kèm chờ phê duyệt thay đổi CSDL" 
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors border border-gray-200 rounded-xl bg-gray-50 cursor-pointer" 
+                  <p className="text-xs text-gray-500 mb-2">Tối đa 3 tệp PNG/JPEG/PDF, mỗi tệp tối đa 2 MB.</p>
+                  <input
+                    type="file" multiple accept="image/png,image/jpeg,application/pdf" onChange={e=>{const selected=Array.from(e.target.files);if(selected.length>3 || selected.some(f=>f.size>2000000 || !['image/png','image/jpeg','application/pdf'].includes(f.type))){setApiError('Tối đa 3 tệp PNG/JPEG/PDF, mỗi tệp tối đa 2 MB.');e.target.value='';setFiles([]);return;}setApiError('');setFiles(selected);}}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors border border-gray-200 rounded-xl bg-gray-50 cursor-pointer"
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-3 mt-8 pt-4 border-t border-gray-100">
                 <button type="button" onClick={() => setShowModal(false)} className="w-1/2 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors">Hủy bỏ</button>
-                <button type="submit" disabled={isSubmitting} className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 transition-colors">
+                <button type="submit" disabled={isSubmitting || scheduleLoading || !!scheduleError || !modalData.scanType} className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex justify-center items-center gap-2 transition-colors">
                   {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
                 </button>
               </div>

@@ -1,3 +1,4 @@
+import {passwordError} from '../validation';
 import {useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {api} from '../api';
@@ -14,6 +15,8 @@ export default function PasswordDialog({onClose}) {
       setError('Mật khẩu xác nhận chưa khớp.');
       return;
     }
+    const validation = passwordError(values.get('next'));
+    if (validation) {setError(validation); return;}
     setBusy(true); setError('');
     try {
       await api('/auth/password', {method: 'POST', body: {

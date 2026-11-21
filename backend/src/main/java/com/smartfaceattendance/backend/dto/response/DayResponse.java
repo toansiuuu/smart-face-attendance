@@ -17,4 +17,5 @@ public record DayResponse(
     boolean complete,
     Map<String, String> milestones,
     Map<String, String> rawMilestones,
-    Long shiftId) {}
+    Long shiftId,
+    boolean workingDaysConfigured) {}

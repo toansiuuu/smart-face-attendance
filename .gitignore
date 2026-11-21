@@ -24,3 +24,6 @@ backend/uploads/
 *.pyc
 deploy/data/
 deploy/*.log
+
+# Temporary report drafts, render output and QA files
+/report-work/

@@ -70,7 +70,8 @@ class LivenessIntegrationTest {
     employee.status = "ACTIVE";
     when(employees.lockById(1L)).thenReturn(Optional.of(employee));
     assertThrows(ApiException.class, () -> service.scan("image"));
-    verifyNoInteractions(recognition, faces, attendance);
+    verifyNoInteractions(recognition, faces);
+    verify(attendance, never()).record(any(), any(), any());
   }
 
   @Test void rejectedChallengeNeverWritesEnrollment() {

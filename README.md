@@ -304,7 +304,7 @@ smart-face-attendance/
 | `DB_URL` | `jdbc:mysql://localhost:3307/...` | JDBC URL |
 | `DB_USERNAME` | `root` | MySQL user |
 | `DB_PASSWORD` | `root` | MySQL password |
-| `WORKING_DAYS` | *(empty)* | Comma-separated working days |
+| `WORKING_DAYS` | *(empty)* | Legacy fallback for schedule versions without saved weekdays; configure days in the admin UI |
 | `GRACE_MINUTES` | `0` | Late grace period |
 | `RECOGNITION_URL` | *(empty)* | Face recognition service URL |
 | `RECOGNITION_SECRET` | *(empty)* | Face recognition API secret |
@@ -326,3 +326,34 @@ Tên đăng nhập (mã nhân viên), email và số điện thoại không đư
 Backend tự thêm unique index email và số điện thoại khi khởi động với database cũ. Nếu dữ liệu cũ trùng, backend giữ nguyên hồ sơ và hoãn index tương ứng, ghi cảnh báo để admin sửa. Mọi thao tác tạo/sửa dùng khóa database chung để ngăn dữ liệu trùng mới, kể cả các yêu cầu đồng thời. Sau khi sửa các hồ sơ cũ, khởi động lại để thêm index. Khôi phục mật khẩu chỉ còn qua email; yêu cầu SMS bị từ chối.
 
 Các module Phòng ban, Nghỉ phép và Ngày lễ đã được gỡ khỏi giao diện, API và xử lý chấm công. Chấm công dùng các ngày làm việc đã cấu hình; không áp dụng ngoại lệ ngày lễ/nghỉ phép. Database cũ giữ nguyên các bảng lịch sử chưa dùng để tránh mất dữ liệu; database mới không tạo các bảng này.
+
+### Validation, quét tự động và bổ sung chấm công
+
+Các form nhân viên, đăng nhập/đổi mật khẩu, lịch làm việc và yêu cầu chỉnh sửa đều kiểm tra dữ liệu ở giao diện và API. Form nhân viên hiển thị lỗi dưới từng trường; họ tên hỗ trợ tiếng Việt, mã chỉ gồm chữ/số/gạch ngang/gạch dưới, điện thoại 10–11 số bắt đầu bằng 0, tuổi 16–120, email hợp lệ và mật khẩu ít nhất 12 ký tự/tối đa 72 byte UTF-8.
+
+Màn hình camera tự quét sau khi cấp quyền và có hình ảnh. Mỗi lần chỉ gửi một yêu cầu; giữa hai lần thử cách ít nhất 2,5 giây, tạm dừng khi tab ẩn và dừng sau thành công. Backend vẫn kiểm tra liveness, danh tính và mốc chấm công trùng.
+
+Form bổ sung lấy lịch lịch sử áp dụng cho ngày đã chọn, hiển thị mốc/giờ chuẩn/dữ liệu đã ghi và tự điền giờ khi chọn mốc. Mốc chưa mở cửa sổ và chưa có dữ liệu, hoặc đang chờ duyệt, bị vô hiệu hóa. Có thể sửa giờ đề xuất cho đúng thực tế. Đính kèm tối đa 3 ảnh PNG/JPEG hoặc PDF, tối đa 2 MB/tệp; tệp được lưu cùng yêu cầu trong database và chỉ người gửi hoặc admin được tải. Bảng correction_attachments được thêm khi backend khởi động, không cần xóa database.
+
+### Chọn ngày làm việc (bao gồm thứ Bảy, Chủ nhật)
+
+Vào **Admin → Cấu hình lịch làm việc**. Mỗi lịch có các ô chọn Thứ Hai đến Chủ nhật và nút chọn nhanh **T2–T6**, **T2–T7**, **Cả tuần**. Ngày không chọn là ngày nghỉ. Phải chọn ít nhất một ngày.
+
+- Lịch cũ chưa lưu ngày: chọn ngày ở ngay thẻ lịch đó, bấm **Lưu ngày làm việc cho lịch này**. Việc xác nhận lần đầu áp dụng từ ngày hiệu lực của lịch; báo cáo sẽ tải lại theo lựa chọn đó.
+- Lịch đã lưu: dùng **Dùng lịch này làm mẫu cho phiên bản mới**, sửa các ngày cần thay đổi, đặt mã phiên bản và ngày hiệu lực trong tương lai. Ngày làm việc và giờ của phiên bản cũ được giữ nguyên cho báo cáo lịch sử.
+- Ngày làm việc không có mốc chấm công chỉ được tính vắng sau khi tất cả cửa sổ chấm công của ngày đã đóng. Ngày nghỉ không tính vắng; ngày chưa đủ cấu hình không tự gán vắng. Thẻ **Ngày vắng trong tháng** cộng tổng lượt ngày–nhân viên đã được xác định vắng.
+
+Các ngày được lưu trong bảng shift_working_day_policy theo từng phiên bản lịch và không mất khi restart. Backend tự thêm bảng khi khởi động. Không cần sửa .env hay xóa database. WORKING_DAYS chỉ còn là giá trị dự phòng cho lịch cũ chưa lưu ngày.
+
+Giờ đề xuất có thể sớm hoặc muộn hơn giờ đã ghi nhận (ví dụ quét ra 15:57, quay lại làm và thực tế ra 18:13). Gửi yêu cầu sau khi thời điểm thực tế đã xảy ra, chọn Giờ ra và điền 18:13; admin duyệt để cập nhật giờ hiệu lực. Bản quét gốc 15:57 được giữ nguyên; không tạo thêm bản quét thứ hai cho cùng mốc. Mốc đã có dữ liệu có thể được chỉnh sửa ngay, kể cả trước giờ chuẩn. Biểu mẫu gợi ý giờ đã ghi nhận, hoặc giờ chuẩn/giờ hiện tại khi chưa có dữ liệu; người dùng vẫn nhập được giờ thực tế.
+
+### Kiểm thử và các trường hợp đồng thời
+
+- Nhận diện dùng thời điểm máy chủ tiếp nhận ảnh để chọn mốc chấm công, tránh độ trễ mô hình làm chuyển nhầm cửa sổ giờ. Mốc đã được duyệt bổ sung cũng được coi là đã ghi nhận, không tạo thêm bản quét gốc ghi đè.
+- Thay đổi mật khẩu và trạng thái tài khoản khóa bản ghi trước khi cập nhật. Đổi mật khẩu đồng thời chỉ một yêu cầu có thể dùng mật khẩu cũ thành công; phiên cũ được yêu cầu đăng nhập lại. Tên đăng nhập không phân biệt hoa thường.
+- Hồ sơ cũ trùng liên hệ vẫn đổi tên/ngừng hoạt động được khi không đổi email/SĐT; dữ liệu trùng mới vẫn bị chặn. Ảnh đại diện được kiểm tra bằng nội dung thật, giới hạn kích thước ảnh và đổi tên sau mỗi lần cập nhật để tránh cache cũ.
+- Báo cáo tháng xác định mức đầy đủ của cấu hình theo từng dòng lịch sử, không dùng lịch hôm nay để kết luận cho cả tháng cũ. Dịch vụ khuôn mặt đóng kết nối gallery SQLite sau mỗi thao tác và từ chối embedding không hữu hạn.
+
+Frontend: chạy npm test, npm run lint và npm run build trong thư mục frontend. Backend: chạy mvn test với Java 17/Maven, hoặc dùng build target build của Dockerfile. Kiểm thử mô hình: docker build --target test -t smart-face-tests deploy, sau đó docker run --rm --entrypoint python smart-face-tests -m unittest test_service test_identity test_enrollment -v. Test target có dependency riêng và không đưa chúng vào runtime; ảnh kiểm thử tùy chọn có thể bị bỏ qua khi không có thư mục testdata.
+
+Lưu ý: database/smart-face-attendance.sql hiện khởi tạo bằng CREATE TABLE IF NOT EXISTS và không có lệnh xóa bảng. Chạy lại giữ nguyên dữ liệu hiện có; thay đổi cấu trúc bảng cũ vẫn cần migration riêng. Đã kiểm tra tạo mới và chạy lại có giữ dữ liệu trong database MySQL tạm riêng. Giữ nguyên volume khi cập nhật ứng dụng.

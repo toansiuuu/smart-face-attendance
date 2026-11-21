@@ -26,7 +26,13 @@ export default function FaceEnrollmentDialog({employee, onClose, onSaved}) {
       .then(value => {
         stream = value;
         if (disposed) {stream.getTracks().forEach(track => track.stop()); return;}
+        if (!video.current) {stream.getTracks().forEach(track=>track.stop()); return;}
         video.current.srcObject = stream;
+        stream.getVideoTracks().forEach(track=>track.addEventListener('ended',()=>{
+          if (disposed) return;
+          runId.current += 1; request.current?.abort(); setRunning(false); setReady(false); setChallenge(null);
+          setError('Camera đã ngắt kết nối. Hãy kết nối lại rồi bấm Thử lại camera.');
+        }));
       })
       .catch(() => {if (!disposed) setError('Không mở được camera. Hãy cấp quyền camera rồi thử lại.');});
     return () => {
@@ -38,7 +44,7 @@ export default function FaceEnrollmentDialog({employee, onClose, onSaved}) {
   }, [retry]);
 
   function frame() {
-    if (!video.current?.videoWidth) throw new Error('Camera chưa sẵn sàng.');
+    if (!video.current?.videoWidth || video.current.readyState < 2 || !video.current.srcObject?.getVideoTracks().some(track=>track.readyState==='live')) throw new Error('Camera chưa sẵn sàng hoặc đã ngắt kết nối.');
     const canvas = document.createElement('canvas');
     const scale = Math.min(1, 640 / video.current.videoWidth);
     canvas.width = Math.round(video.current.videoWidth * scale);

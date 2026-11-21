@@ -45,6 +45,11 @@ class BackendIntegrationTest {
   @Autowired ShiftService shiftService;
   @Autowired AttendanceService attendance;
   @Autowired CorrectionService corrections;
+  @Autowired CorrectionAttachments correctionAttachments;
+  @Autowired AttendanceEventRepository attendanceEvents;
+  @Autowired CorrectionRepository correctionRecords;
+  @Autowired ShiftRepository shiftRecords;
+  @Autowired MilestoneRepository milestoneRecords;
   @Autowired PasswordEncoder encoder;
   LocalDate today;
   Account manager;
@@ -84,7 +89,7 @@ class BackendIntegrationTest {
                 new MilestoneRequest(
                     "AFTERNOON_IN", LocalTime.of(13, 0), LocalTime.of(13, 0), LocalTime.of(14, 59)),
                 new MilestoneRequest(
-                    "WORK_OUT", LocalTime.of(17, 0), LocalTime.of(15, 0), LocalTime.of(23, 59)))));
+                    "WORK_OUT", LocalTime.of(17, 0), LocalTime.of(15, 0), LocalTime.of(23, 59))), List.of(DayOfWeek.values())));
   }
 
   Long employee(String code) {
@@ -110,6 +115,260 @@ class BackendIntegrationTest {
   @Test
   void unauthenticatedAccessRejected() throws Exception {
     mvc.perform(get("/api/employees")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void loginAcceptsUsernameCaseAndSurroundingSpaces() throws Exception {
+    mvc.perform(post("/api/auth/login").with(csrf()).contentType("application/json")
+        .content("{\"username\":\" ADMIN \",\"password\":\"ValidPassword123\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.username").value("admin"));
+  }
+
+  @Test
+  void legacyDuplicateContactsDoNotBlockDisableOrRename() {
+    Long first = employeeService.create(new EmployeeRequest("LEGACY1", "First User", "ValidPassword123", "0912345678", "first@example.test", null, null, null)).id();
+    Long second = employeeService.create(new EmployeeRequest("LEGACY2", "Second User", "ValidPassword123", "0987654321", "second@example.test", null, null, null)).id();
+    jdbc.execute("ALTER TABLE employees DROP CONSTRAINT uq_employees_email");
+    jdbc.execute("ALTER TABLE employees DROP CONSTRAINT uq_employees_phone");
+    try {
+      jdbc.update("UPDATE employees SET email = ?, phone = ? WHERE id = ?", "FIRST@EXAMPLE.TEST", "0912345678", second);
+      employeeService.update(second, new EmployeeUpdate("Renamed User", "INACTIVE", "0912345678", "FIRST@EXAMPLE.TEST", null, null, null));
+      assertFalse(accounts.findByEmployeeId(second).orElseThrow().enabled);
+      assertEquals("Renamed User", employees.findById(second).orElseThrow().fullName);
+      assertTrue(accounts.findByEmployeeId(first).orElseThrow().enabled);
+      assertEquals(409, assertThrows(ApiException.class, () -> employeeService.create(new EmployeeRequest(
+          "LEGACY3", "Third User", "ValidPassword123", null, "first@example.test", null, null, null))).status);
+    } finally {
+      jdbc.update("UPDATE employees SET email = ?, phone = ? WHERE id = ?", "second@example.test", "0987654321", second);
+      jdbc.execute("ALTER TABLE employees ADD CONSTRAINT uq_employees_email UNIQUE (email)");
+      jdbc.execute("ALTER TABLE employees ADD CONSTRAINT uq_employees_phone UNIQUE (phone)");
+    }
+  }
+
+  @Test
+  void approvedMissingMilestoneCannotBeOverwrittenByLaterRawScan() {
+    schedule();
+    Long id = employee("APPROVEDSCAN");
+    corrections.create(accounts.findByEmployeeId(id).orElseThrow(), new CorrectionRequest(today, "MORNING_IN", LocalTime.MIDNIGHT, "Missing morning scan"));
+    Long requestId = jdbc.queryForObject("SELECT id FROM correction_requests", Long.class);
+    corrections.review(manager, requestId, new ReviewRequest(true, "Confirmed"));
+    assertEquals(409, assertThrows(ApiException.class, () -> attendance.record(id, today.atTime(8, 0), null)).status);
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM attendance_events", Integer.class));
+    assertEquals(today.atStartOfDay(), attendance.effective(id, today).get("MORNING_IN"));
+  }
+
+  @Test
+  void avatarValidatesActualBytesAndUsesUniqueName() throws Exception {
+    Long id = employee("AVATAR");
+    var fake = new org.springframework.mock.web.MockMultipartFile("file", "fake.jpg", "image/jpeg", "not an image".getBytes());
+    assertEquals(400, assertThrows(ApiException.class, () -> employeeService.uploadAvatar(id, fake)).status);
+    assertNull(employees.findById(id).orElseThrow().avatarUrl);
+    var image = new java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB);
+    var bytes = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(image, "png", bytes);
+    var valid = new org.springframework.mock.web.MockMultipartFile("file", "../../unsafe.png", "application/octet-stream", bytes.toByteArray());
+    employeeService.uploadAvatar(id, valid);
+    String url = employees.findById(id).orElseThrow().avatarUrl;
+    assertTrue(url.matches("/uploads/avatars/" + id + "-[a-f0-9-]+\\.png"));
+    employeeService.uploadAvatar(id, valid);
+    assertNotEquals(url, employees.findById(id).orElseThrow().avatarUrl);
+    assertFalse(java.nio.file.Files.exists(java.nio.file.Path.of("uploads", url.substring("/uploads/".length()))));
+  }
+
+  @Test
+  void concurrentPasswordChangesWithOldPasswordAllowOnlyOneWinner() throws Exception {
+    var firstSession = login("admin");
+    var secondSession = login("admin");
+    var pool = Executors.newFixedThreadPool(2);
+    var ready = new CountDownLatch(1);
+    try {
+      var jobs = new ArrayList<Future<Integer>>();
+      int index = 0;
+      for (var session : List.of(firstSession, secondSession)) {
+        String password = "ChangedPassword" + (++index);
+        jobs.add(pool.submit(() -> {
+          ready.await();
+          return mvc.perform(post("/api/auth/password").session(session).with(csrf()).contentType("application/json")
+              .content("{\"currentPassword\":\"ValidPassword123\",\"newPassword\":\"" + password + "\"}"))
+              .andReturn().getResponse().getStatus();
+        }));
+      }
+      ready.countDown();
+      var statuses = new ArrayList<Integer>();
+      for (var job : jobs) statuses.add(job.get(15, TimeUnit.SECONDS));
+      Collections.sort(statuses);
+      assertEquals(List.of(200, 401), statuses);
+    } finally { pool.shutdownNow(); }
+  }
+
+  @Test
+  void weekdaysDistinguishAbsenceFromSaturdayAndSundayOff() {
+    schedule();
+    Long id = employee("WEEKDAYS");
+    var shift = shiftService.applicable(today);
+    jdbc.update("UPDATE shift_working_day_policy SET working_days = ? WHERE shift_id = ?", "MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY", shift.id);
+    LocalDate monday = today.minusWeeks(2).with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    jdbc.update("UPDATE shifts SET effective_from = ? WHERE id = ?", monday.minusDays(1), shift.id);
+    var employee = employees.findById(id).orElseThrow();
+    employee.createdAt = monday.atStartOfDay(); employees.saveAndFlush(employee);
+    assertEquals("Vắng mặt", attendance.day(employee, monday).status());
+    assertEquals("Ngày nghỉ", attendance.day(employee, monday.plusDays(5)).status());
+    assertEquals("Ngày nghỉ", attendance.day(employee, monday.plusDays(6)).status());
+    var error = assertThrows(ApiException.class, () -> attendance.record(id, monday.plusDays(6).atTime(8, 0), null));
+    assertEquals(409, error.status);
+    var report = attendance.report(id, monday, monday.plusDays(6));
+    assertEquals(5, report.stream().filter(row -> row.status().equals("Vắng mặt")).count());
+    assertEquals(2, report.stream().filter(row -> row.status().equals("Ngày nghỉ")).count());
+  }
+
+  @Test
+  void selectedWeekendDaysAllowAttendance() {
+    schedule();
+    Long id = employee("WEEKEND");
+    var shift = shiftService.applicable(today);
+    jdbc.update("UPDATE shift_working_day_policy SET working_days = ? WHERE shift_id = ?", "SATURDAY,SUNDAY", shift.id);
+    LocalDate saturday = today.with(java.time.temporal.TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY));
+    assertEquals("MORNING_IN", attendance.record(id, saturday.atTime(8, 0), null).eventType);
+    assertEquals("MORNING_IN", attendance.record(id, saturday.plusDays(1).atTime(8, 0), null).eventType);
+  }
+
+  @Test
+  void absenceWaitsUntilAllScanWindowsHaveClosed() {
+    schedule();
+    Long id = employee("INPROGRESS");
+    var employee = employees.findById(id).orElseThrow();
+    var duringDay = new AttendanceService(employees, attendanceEvents, correctionRecords, shiftService, 0) {
+      @Override public LocalDateTime now() { return today.atTime(12, 0); }
+    };
+    var afterDay = new AttendanceService(employees, attendanceEvents, correctionRecords, shiftService, 0) {
+      @Override public LocalDateTime now() { return today.plusDays(1).atTime(0, 1); }
+    };
+    assertEquals("Đang diễn ra", duringDay.day(employee, today).status());
+    assertEquals("Vắng mặt", afterDay.day(employee, today).status());
+  }
+
+  @Test
+  void managerCanFillLegacyWeekdaysOnceButCannotRewriteSavedHistory() throws Exception {
+    schedule(); employee("DAYUSER");
+    Long id = shiftService.applicable(today).id;
+    jdbc.update("DELETE FROM shift_working_day_policy WHERE shift_id = ?", id);
+    var managerSession = login("admin");
+    String path = "/api/shifts/" + id + "/working-days";
+    mvc.perform(put(path).session(login("DAYUSER")).with(csrf()).contentType("application/json").content("{\"workingDays\":[\"MONDAY\"]}"))
+        .andExpect(status().isForbidden());
+    for (String days : List.of("[]", "[\"INVALID\"]", "[\"MONDAY\",\"MONDAY\"]", "[null]")) {
+      mvc.perform(put(path).session(managerSession).with(csrf()).contentType("application/json").content("{\"workingDays\":" + days + "}"))
+          .andExpect(status().isBadRequest());
+    }
+    mvc.perform(put(path).session(managerSession).with(csrf()).contentType("application/json").content("{\"workingDays\":[\"SATURDAY\",\"SUNDAY\"]}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.workingDaysSaved").value(true))
+        .andExpect(jsonPath("$.workingDays[0]").value("SATURDAY"));
+    mvc.perform(put(path).session(managerSession).with(csrf()).contentType("application/json").content("{\"workingDays\":[\"MONDAY\"]}"))
+        .andExpect(status().isConflict());
+    assertEquals(EnumSet.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY), shiftService.workingDays(id));
+  }
+
+  @Test
+  void newVersionWeekdaysApplyOnlyFromItsEffectiveDate() {
+    schedule();
+    var original = shiftService.applicable(today);
+    var points = shiftService.points(original.id).stream().map(point -> new MilestoneRequest(point.eventType, point.targetTime, point.windowStart, point.windowEnd)).toList();
+    shiftService.create(new ShiftRequest("NEXT", "New weekdays", today.plusDays(1), points, List.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)));
+    assertEquals(EnumSet.allOf(DayOfWeek.class), shiftService.workingDays(shiftService.applicable(today).id));
+    assertEquals(EnumSet.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY), shiftService.workingDays(shiftService.applicable(today.plusDays(1)).id));
+  }
+
+  @Test
+  void missingLegacyWeekdaysNeverInventAbsence() {
+    schedule();
+    Long id = employee("UNCONFIGURED");
+    Long shiftId = shiftService.applicable(today).id;
+    jdbc.update("DELETE FROM shift_working_day_policy WHERE shift_id = ?", shiftId);
+    var unconfiguredShifts = new ShiftService(shiftRecords, milestoneRecords, jdbc, "");
+    var service = new AttendanceService(employees, attendanceEvents, correctionRecords, unconfiguredShifts, 0) {
+      @Override public LocalDateTime now() { return today.plusDays(1).atTime(0, 1); }
+    };
+    assertFalse(service.policyConfigured());
+    assertEquals("Chưa có dữ liệu", service.day(employees.findById(id).orElseThrow(), today).status());
+  }
+
+  @Test
+  void creatingScheduleRequiresWorkingWeekdays() throws Exception {
+    schedule();
+    var existing = shiftService.applicable(today);
+    var points = shiftService.points(existing.id).stream().map(point -> new MilestoneRequest(point.eventType, point.targetTime, point.windowStart, point.windowEnd)).toList();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+    for (List<DayOfWeek> days : java.util.Arrays.<List<DayOfWeek>>asList(null, List.of())) {
+      var body = new ShiftRequest("MISSING", "Missing days", today.plusDays(1), points, days);
+      mvc.perform(post("/api/shifts").session(login("admin")).with(csrf()).contentType("application/json").content(mapper.writeValueAsBytes(body)))
+          .andExpect(status().isBadRequest()).andExpect(jsonPath("$.fields.workingDays").exists());
+    }
+    assertEquals(1, shiftRecords.count());
+  }
+
+  @Test
+  void invalidEmployeeFieldsReturnFieldErrorsAndDoNotCreateAccount() throws Exception {
+    mvc.perform(post("/api/employees").session(login("admin")).with(csrf()).contentType("application/json")
+        .content("{\"employeeCode\":\"BAD CODE!\",\"fullName\":\"12345\",\"password\":\"short\",\"phone\":\"abcdefghij\",\"email\":\"invalid\",\"gender\":\"INVALID\",\"dateOfBirth\":\"2999-01-01\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fields.employeeCode").exists())
+        .andExpect(jsonPath("$.fields.fullName").exists())
+        .andExpect(jsonPath("$.fields.password").exists())
+        .andExpect(jsonPath("$.fields.phone").exists())
+        .andExpect(jsonPath("$.fields.email").exists())
+        .andExpect(jsonPath("$.fields.gender").exists())
+        .andExpect(jsonPath("$.fields.dateOfBirth").exists());
+    assertEquals(0, employees.count());
+  }
+
+  @Test
+  void correctionOptionsUseApplicableScheduleAndShowPendingMilestones() throws Exception {
+    schedule();
+    Long id = employee("OPTIONS");
+    var session = login("OPTIONS");
+    mvc.perform(get("/api/corrections/options").param("workDate", today.toString()).session(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.milestones.length()").value(4))
+        .andExpect(jsonPath("$.milestones[0].eventType").value("MORNING_IN"))
+        .andExpect(jsonPath("$.milestones[0].targetTime").value("08:00:00"));
+    corrections.create(accounts.findByEmployeeId(id).orElseThrow(),
+        new CorrectionRequest(today, "MORNING_IN", LocalTime.MIDNIGHT, "Missing attendance"));
+    mvc.perform(get("/api/corrections/options").param("workDate", today.toString()).session(session))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.milestones[0].pending").value(true));
+    mvc.perform(get("/api/corrections/options").param("workDate", today.plusDays(1).toString()).session(session))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void attachmentsPersistWithCorrectionAndArePrivateToOwnerAndManager() throws Exception {
+    schedule(); employee("OWNER"); employee("OTHER");
+    var request = new org.springframework.mock.web.MockMultipartFile("request", "request.json", "application/json",
+        ("{\"workDate\":\"" + today + "\",\"eventType\":\"MORNING_IN\",\"requestedTime\":\"00:00\",\"reason\":\"Missing clock scan\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    byte[] bytes = "%PDF-1.4\nTest attachment\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+    var file = new org.springframework.mock.web.MockMultipartFile("files", "evidence.pdf", "application/pdf", bytes);
+    var session = login("OWNER");
+    mvc.perform(multipart("/api/corrections").file(request).file(file).session(session).with(csrf()))
+        .andExpect(status().isCreated()).andExpect(jsonPath("$.attachments").value(1))
+        .andExpect(jsonPath("$.attachmentFiles[0].name").value("evidence.pdf"));
+    String url = jdbc.queryForObject("SELECT CONCAT('/api/corrections/',correction_id,'/attachments/',id) FROM correction_attachments", String.class);
+    mvc.perform(get(url).session(session)).andExpect(status().isOk()).andExpect(content().bytes(bytes))
+        .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+    mvc.perform(get(url).session(login("admin"))).andExpect(status().isOk());
+    mvc.perform(get(url).session(login("OTHER"))).andExpect(status().isForbidden());
+    mvc.perform(get(url)).andExpect(status().isUnauthorized());
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM attendance_events", Integer.class));
+  }
+
+  @Test
+  void invalidAttachmentDoesNotLeaveCorrectionOrFile() throws Exception {
+    schedule(); employee("OWNER");
+    var request = new org.springframework.mock.web.MockMultipartFile("request", "request.json", "application/json",
+        ("{\"workDate\":\"" + today + "\",\"eventType\":\"MORNING_IN\",\"requestedTime\":\"00:00\",\"reason\":\"Missing clock scan\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    var file = new org.springframework.mock.web.MockMultipartFile("files", "fake.pdf", "application/pdf", "not a PDF".getBytes());
+    mvc.perform(multipart("/api/corrections").file(request).file(file).session(login("OWNER")).with(csrf()))
+        .andExpect(status().isBadRequest());
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM correction_requests", Integer.class));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM correction_attachments", Integer.class));
   }
 
   @Test
@@ -248,6 +507,68 @@ class BackendIntegrationTest {
     assertThrows(
         ApiException.class,
         () -> corrections.review(manager, request, new ReviewRequest(false, "Again")));
+  }
+
+  @Test
+  void laterCheckoutCorrectionIsAllowedAndPreservesTheOriginalScan() {
+    schedule();
+    Long id = employee("RETURNED");
+    var date = today.minusDays(1);
+    var employee = employees.findById(id).orElseThrow();
+    employee.createdAt = date.atStartOfDay(); employees.saveAndFlush(employee);
+    attendance.record(id, date.atTime(8, 0), null);
+    attendance.record(id, date.atTime(12, 0), null);
+    attendance.record(id, date.atTime(13, 0), null);
+    attendance.record(id, date.atTime(15, 57), null);
+    assertThrows(ApiException.class, () -> attendance.record(id, date.atTime(18, 13), null));
+    corrections.create(accounts.findByEmployeeId(id).orElseThrow(),
+        new CorrectionRequest(date, "WORK_OUT", LocalTime.of(18, 13), "Returned to work and forgot the final scan"));
+    assertEquals(date.atTime(15, 57), attendance.effective(id, date).get("WORK_OUT"));
+    Long requestId = jdbc.queryForObject("SELECT id FROM correction_requests", Long.class);
+    corrections.review(manager, requestId, new ReviewRequest(true, "Confirmed actual checkout"));
+    assertEquals(date.atTime(15, 57), attendance.raw(id, date).get("WORK_OUT"));
+    assertEquals(date.atTime(18, 13), attendance.effective(id, date).get("WORK_OUT"));
+    assertEquals(553, attendance.day(employee, date).workedMinutes());
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM attendance_events WHERE employee_id = ? AND event_type = 'WORK_OUT'", Integer.class, id));
+  }
+
+  @Test
+  void earlyCheckoutCanBeCorrectedBeforeTheStandardCheckoutTime() {
+    schedule();
+    Long id = employee("EARLYOUT");
+    attendance.record(id, today.atTime(15, 57), null);
+    var at1610 = new AttendanceService(employees, attendanceEvents, correctionRecords, shiftService, 0) {
+      @Override public LocalDateTime now() { return today.atTime(16, 10); }
+    };
+    var service = new CorrectionService(correctionRecords, employees, at1610, correctionAttachments, shiftService);
+    var account = accounts.findByEmployeeId(id).orElseThrow();
+    var options = (Map<?, ?>) service.options(account, today);
+    var checkout = (Map<?, ?>) ((List<?>) options.get("milestones")).get(3);
+    assertEquals(true, checkout.get("available"));
+    assertEquals(LocalTime.of(15, 57), checkout.get("suggestedTime"));
+    assertEquals(LocalTime.of(17, 0), checkout.get("targetTime"));
+
+    Long missingId = employee("MISSINGOUT");
+    var missingOptions = (Map<?, ?>) service.options(accounts.findByEmployeeId(missingId).orElseThrow(), today);
+    var missingCheckout = (Map<?, ?>) ((List<?>) missingOptions.get("milestones")).get(3);
+    assertEquals(true, missingCheckout.get("available"));
+    assertEquals(LocalTime.of(16, 10), missingCheckout.get("suggestedTime"));
+  }
+
+  @Test
+  void correctionErrorsDistinguishFutureTimeFromDatesBeforeEmployment() {
+    schedule();
+    Long id = employee("TIMEERROR");
+    var account = accounts.findByEmployeeId(id).orElseThrow();
+    var future = attendance.now().plusMinutes(10);
+    var futureError = assertThrows(ApiException.class, () -> corrections.create(account,
+        new CorrectionRequest(future.toLocalDate(), "WORK_OUT", future.toLocalTime(), "Actual checkout correction")));
+    assertTrue(futureError.getMessage().contains("Giờ đề xuất chưa xảy ra"));
+    assertTrue(futureError.getMessage().contains("giờ Việt Nam"));
+    var oldDateError = assertThrows(ApiException.class, () -> corrections.create(account,
+        new CorrectionRequest(today.minusDays(1), "WORK_OUT", LocalTime.of(17, 0), "Actual checkout correction")));
+    assertTrue(oldDateError.getMessage().contains("ngày tạo hồ sơ"));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM correction_requests", Integer.class));
   }
 
   @Test

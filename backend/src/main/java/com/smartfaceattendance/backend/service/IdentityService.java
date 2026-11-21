@@ -19,12 +19,19 @@ public class IdentityService {
   }
 
   public Account current() {
+    return resolve(false);
+  }
+
+  public Account currentLocked() {
+    return resolve(true);
+  }
+
+  private Account resolve(boolean locked) {
     var auth = SecurityContextHolder.getContext().getAuthentication();
     if (auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken)
       throw new ApiException(401, "Login required");
     var a =
-        accounts
-            .findByUsername(auth.getName())
+        (locked ? accounts.lockByUsername(auth.getName()) : accounts.findByUsername(auth.getName()))
             .orElseThrow(() -> new ApiException(401, "Login required"));
     if (!a.enabled) throw new ApiException(401, "Account disabled");
     if (!(auth.getPrincipal() instanceof AccountPrincipal principal)

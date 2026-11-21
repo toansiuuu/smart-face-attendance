@@ -5,10 +5,10 @@ import ForgotPasswordDialog from './ForgotPasswordDialog';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState(''); 
+  const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [forgotPassword, setForgotPassword] = useState(false);
-  
+
   // State quản lý ẩn/hiện mật khẩu bằng icon con mắt ở input
   const [showPassword, setShowPassword] = useState(false);
 
@@ -16,20 +16,21 @@ const Login = () => {
   const [busy,setBusy]=useState(false);
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!userId.trim() || userId.trim().length>80 || !password || password.length>72) {setError('Nhập tài khoản (tối đa 80 ký tự) và mật khẩu (tối đa 72 ký tự).');return;}
     setError('');setBusy(true);
-    try {const user=await api('/auth/login',{method:'POST',body:{username:userId,password}});navigate(user.role==='MANAGER'?'/admin':'/employee');}
+    try {const user=await api('/auth/login',{method:'POST',body:{username:userId.trim(),password}});navigate(user.role==='MANAGER'?'/admin':'/employee');}
     catch(err){setError(err.message);}finally{setBusy(false);}
   };
 
   return (
     <div className="flex flex-col items-center justify-center p-4 w-full min-h-screen bg-gray-50 font-sans">
-      
+
       {/* TIÊU ĐỀ LỚN CỦA HỆ THỐNG */}
       <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">Hệ thống quản lý chấm công</h2>
-      
+
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 animate-fade-in">
         <div className="text-center mb-8">
-          
+
           {/* ICON LOGO HÌNH CON MẮT */}
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 text-blue-600 rounded-full mb-4 shadow-sm">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -37,7 +38,7 @@ const Login = () => {
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </div>
-          
+
           <h2 className="text-2xl font-bold text-gray-800">Đăng Nhập Hệ Thống</h2>
         </div>
 
@@ -45,29 +46,29 @@ const Login = () => {
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tài khoản</label>
-            <input 
-              type="text" 
-              required 
-              value={userId} 
-              onChange={(e) => setUserId(e.target.value)} 
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+            <input
+              type="text"
+              required
+              maxLength={80} autoComplete="username" value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
               placeholder="Tên tài khoản / Mã nhân viên"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
             <div className="relative">
-              <input 
-                type={showPassword ? "text" : "password"} 
-                required 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm pr-12" 
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                maxLength={72} autoComplete="current-password" value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm pr-12"
                 placeholder="••••••"
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-3 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
               >

@@ -1,6 +1,7 @@
 """SFace identity matching with a persistent, versioned SQLite embedding gallery."""
 
 import hashlib
+from contextlib import contextmanager
 import math
 import os
 from pathlib import Path
@@ -35,8 +36,14 @@ class IdentityEngine:
             if db.execute("SELECT 1 FROM identities WHERE model_version != ? LIMIT 1", (self.version,)).fetchone():
                 raise RuntimeError("Gallery model differs from identity model; migrate/re-enroll before changing models")
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.database, timeout=15)
+        db = sqlite3.connect(self.database, timeout=15)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def embedding(self, rgb):
         return self.analyze(rgb)[0]
@@ -74,7 +81,7 @@ class IdentityEngine:
     def normalize(feature):
         feature = np.asarray(feature, dtype=np.float32).reshape(-1)
         norm = float(np.linalg.norm(feature))
-        if feature.size != 128 or not np.isfinite(feature).all() or norm < 1e-8:
+        if feature.size != 128 or not np.isfinite(feature).all() or not math.isfinite(norm) or norm < 1e-8:
             raise HTTPException(503, "Invalid identity embedding")
         return feature / norm
 

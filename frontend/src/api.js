@@ -1,16 +1,27 @@
-const base = import.meta.env.VITE_API_BASE_URL || '/api';
-let csrf;
+const base = import.meta.env?.VITE_API_BASE_URL || '/api';
+async function send(url, options) {
+  try {return await fetch(url, options);} catch (error) {
+    if (error.name === 'AbortError') throw error;
+    throw new Error('Không kết nối được máy chủ. Kiểm tra kết nối và thử lại.', {cause:error});
+  }
+}
 export async function api(path, options = {}) {
-  const method = options.method || 'GET';
-  if (!['GET','HEAD','OPTIONS'].includes(method) && !csrf) {
-    const r = await fetch(base+'/auth/csrf', {credentials:'include'});
+  const method = (options.method || 'GET').toUpperCase();
+  let csrf;
+  if (!['GET','HEAD','OPTIONS'].includes(method)) {
+    const r = await send(base+'/auth/csrf', {credentials:'include', signal:options.signal});
     if(!r.ok) throw new Error('Không lấy được CSRF token');
     csrf = await r.json();
+    if (!csrf.token || !csrf.headerName) throw new Error('Phiên bảo mật không hợp lệ. Hãy tải lại trang.');
   }
-  const response = await fetch(base+path, {...options, credentials:'include', headers:{'Content-Type':'application/json', ...(csrf?{[csrf.headerName]:csrf.token}:{}), ...options.headers}, body:options.body === undefined ? undefined : JSON.stringify(options.body)});
-  const data = await response.json().catch(()=>({}));
-  if (!response.ok) {if(response.status===403)csrf=null; const error=new Error(data.message || `HTTP ${response.status}`); error.status=response.status; throw error;}
-  if(['/auth/login','/auth/logout','/auth/password','/auth/password-recovery/reset'].includes(path))csrf=null;
+  const response = await send(base+path, {...options, method, credentials:'include', headers:{...(options.body instanceof FormData ? {} : {'Content-Type':'application/json'}), ...(csrf?{[csrf.headerName]:csrf.token}:{}), ...options.headers}, body:options.body === undefined ? undefined : options.body instanceof FormData ? options.body : JSON.stringify(options.body)});
+  const data = response.status === 204 ? {} : await response.json().catch(()=>null);
+  if (!response.ok) {
+    if (response.status === 401 && path !== '/auth/login' && typeof window !== 'undefined') window.dispatchEvent(new Event('auth-expired'));
+    const error=new Error(data?.message || (response.status === 401 ? 'Phiên đăng nhập đã hết hạn.' : `HTTP ${response.status}`));
+    error.status=response.status; error.fields=data?.fields; throw error;
+  }
+  if (data === null) throw new Error('Máy chủ trả về dữ liệu không hợp lệ. Hãy thử lại.');
   return data;
 }
 export async function allPages(path) {
@@ -26,3 +37,8 @@ export function monthRange(value){const [m,y]=value.split('/').map(Number);retur
 export const attendanceRow=r=>({...r,date:r.date.split('-').reverse().join('/')});
 export const correctionRow=r=>({...r,dateTarget:r.dateTarget.split('-').reverse().join('/'),scanType:labels[r.eventType],submitTime:r.submitTime.replace('T',' ')});
 export async function logout(navigate){await api('/auth/logout',{method:'POST'});navigate('/login');}
+
+export function summarizeAttendance(rows) {
+  return {total:rows.length, absent:rows.filter(row=>row.workingDaysConfigured && row.status==='Vắng mặt').length,
+    unconfigured:rows.filter(row=>!row.workingDaysConfigured).length};
+}

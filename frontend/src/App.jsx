@@ -22,6 +22,7 @@ function App() {
           
           {/* Trang lịch sử cá nhân của Nhân viên */}
           <Route path="/employee" element={<Protected role="EMPLOYEE"><EmployeeDashboard /></Protected>} />
+          <Route path="*" element={<Navigate to="/login" replace/>}/>
         </Routes>
       </div>
     </BrowserRouter>

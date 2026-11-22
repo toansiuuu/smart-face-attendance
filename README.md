@@ -14,6 +14,18 @@ Hệ thống điểm danh bằng nhận diện khuôn mặt — Đồ án chuyê
 | Face Liveness | Python API using supplied ONNX detector and anti-spoofing model in `deploy/` |
 | Face Identity Recognition | OpenCV SFace with a persistent embedding gallery in the Python face service |
 
+## Cập nhật hồ sơ và khôi phục tài khoản nhân viên
+
+Vào **Admin → Nhân viên → Chỉnh sửa hồ sơ** để đổi họ tên, email nhận mã khôi phục, số điện thoại, chức vụ, ngày sinh, giới tính và trạng thái làm việc. Email bắt buộc, số điện thoại có thể để trống; email/số điện thoại mới không được trùng nhân viên khác. Có thể tìm hồ sơ bằng tên, mã nhân viên, email hoặc số điện thoại.
+
+Nếu nhân viên mất điện thoại hoặc không truy cập được email cũ:
+
+1. Admin xác định đúng hồ sơ nhân viên và cập nhật email mới mà nhân viên đang sử dụng.
+2. Nếu hồ sơ đã ngừng hoạt động, chọn **Đang làm việc** rồi **Lưu thay đổi** (hoặc dùng nút **Kích hoạt lại**).
+3. Nhân viên dùng tên đăng nhập cũ (mã nhân viên), chọn **Quên mật khẩu** ở trang đăng nhập để nhận mã tại email mới và đặt mật khẩu mới.
+
+Việc này giữ nguyên mã nhân viên, tài khoản, khuôn mặt và lịch sử chấm công; không cần tạo tài khoản hay đăng ký lại khuôn mặt. Mã khôi phục đã gửi tới email cũ không dùng được sau khi đổi sang email mới. Lưu hồ sơ không tự gửi email hoặc tự đổi mật khẩu; hệ thống gửi mã khi nhân viên yêu cầu khôi phục, qua dịch vụ email đã cấu hình. Nhân viên không có quyền gọi API chỉnh sửa hồ sơ của admin.
+
 ## Thống kê và báo cáo
 
 Đăng nhập tài khoản quản trị, chọn **Thống kê & báo cáo** ở thanh bên.

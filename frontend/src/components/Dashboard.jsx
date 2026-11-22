@@ -1,4 +1,5 @@
-import {employeeErrors, nameError} from '../validation';
+import {employeeErrors} from '../validation';
+import EmployeeEditDialog from './EmployeeEditDialog';
 import SchedulePanel from './SchedulePanel';
 import ReportsPanel from './ReportsPanel';
 import PasswordDialog from './PasswordDialog';
@@ -13,6 +14,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
   const navigate = useNavigate();
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [faceEmployee, setFaceEmployee] = useState(null);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [employeeStatusBusy, setEmployeeStatusBusy] = useState(null);
   const [notice, setNotice] = useState('');
   const [apiError,setApiError]=useState('');
   const [user,setUser]=useState(null);
@@ -78,7 +81,8 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
       .finally(()=>{if(active)setIsLoading(false);});return()=>{active=false;};
   },[selectedMonth,reload]);
   const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(empSearchTerm.toLowerCase()) || emp.empId.toLowerCase().includes(empSearchTerm.toLowerCase()) || emp.phone.includes(empSearchTerm);
+    const q = empSearchTerm.trim().toLowerCase();
+    const matchesSearch = emp.name.toLowerCase().includes(q) || emp.empId.toLowerCase().includes(q) || emp.phone.includes(q) || (emp.email || '').toLowerCase().includes(q);
     return matchesSearch;
   });
   const currentEmployees = filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -125,8 +129,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
     }
   };
   const empPatchBody=(emp,overrides={})=>({fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',phone:emp.phone||null,email:emp.email||null,position:emp.position||null,dateOfBirth:emp.dateOfBirth||null,gender:emp.gender||null,...overrides});
-  const editEmployee=async(emp)=>{const name=window.prompt('Tên nhân viên:',emp.name);if(name===null)return;if(nameError(name)){setApiError(nameError(name));return;}try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{fullName:name.trim()})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
-  const toggleEmployee=async(emp)=>{try{await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setReload(x=>x+1);}catch(e){setApiError(e.message);}};
+  const toggleEmployee=async(emp)=>{if(employeeStatusBusy!==null)return;setEmployeeStatusBusy(emp.id);try{setApiError('');await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setNotice(`${emp.workStatus==='Đang làm việc'?'Đã ngừng hoạt động':'Đã kích hoạt lại'} tài khoản ${emp.empId}.`);setReload(x=>x+1);}catch(e){setApiError(e.message);}finally{setEmployeeStatusBusy(null);}};
 
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -356,13 +359,13 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
       <div className="flex flex-col md:flex-row gap-4 mb-4">
         <div className="relative flex-1">
           <svg className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-          <input type="text" value={empSearchTerm} onChange={(e) => setEmpSearchTerm(e.target.value)} placeholder="Tìm kiếm theo Tên, Mã NV..." className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition-all" />
+          <input type="text" value={empSearchTerm} onChange={(e) => setEmpSearchTerm(e.target.value)} placeholder="Tìm theo tên, mã nhân viên, email, số điện thoại..." className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition-all" />
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-left border-collapse">
-          <thead><tr className="bg-[#f8fafc] text-gray-500 text-sm border-b border-gray-200"><th className="p-4 font-semibold w-1/4">Nhân viên</th><th className="p-4 font-semibold w-1/5">Số điện thoại</th><th className="p-4 font-semibold w-1/5">Trạng thái</th><th className="p-4 font-semibold w-1/5">Dữ liệu khuôn mặt</th><th className="p-4 font-semibold w-1/6 text-center">Thao tác</th></tr></thead>
+          <thead><tr className="bg-[#f8fafc] text-gray-500 text-sm border-b border-gray-200"><th className="p-4 font-semibold w-1/4">Nhân viên</th><th className="p-4 font-semibold w-1/5">Thông tin liên hệ</th><th className="p-4 font-semibold w-1/5">Trạng thái</th><th className="p-4 font-semibold w-1/5">Dữ liệu khuôn mặt</th><th className="p-4 font-semibold w-1/6 text-center">Thao tác</th></tr></thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
               [...Array(5)].map((_, idx) => <tr key={idx} className="animate-pulse"><td className="p-4 flex gap-3 items-center"><div className="w-10 h-10 bg-gray-200 rounded-full"></div><div><div className="h-4 bg-gray-200 rounded w-24 mb-1.5"></div><div className="h-3 bg-gray-200 rounded w-32"></div></div></td><td className="p-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td><td className="p-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td><td className="p-4"><div className="h-6 bg-gray-200 rounded-md w-28"></div></td><td className="p-4"><div className="h-8 bg-gray-200 rounded-md w-16 mx-auto"></div></td></tr>)
@@ -372,10 +375,10 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
               currentEmployees.map((emp) => (
                 <tr key={emp.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="p-4"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-50 text-blue-600 font-bold rounded-full flex items-center justify-center text-sm shrink-0 border border-blue-100">{emp.avatar}</div><div><p className="text-sm font-bold text-gray-800">{emp.name}</p><p className="text-[11px] text-gray-500 mt-0.5">{emp.empId}</p></div></div></td>
-                  <td className="p-4 text-sm text-gray-600 font-bold">{emp.phone}</td>
+                  <td className="p-4 text-sm text-gray-600"><p className="font-semibold">{emp.phone || 'Chưa có số điện thoại'}</p><p className="mt-1 text-xs break-all text-gray-500">{emp.email}</p></td>
                   <td className="p-4">{emp.workStatus === 'Đang làm việc' ? <span className="px-2.5 py-1 bg-green-50 text-green-600 rounded text-xs font-bold border border-green-100">Đang làm việc</span> : <span className="px-2.5 py-1 bg-gray-100 text-gray-500 rounded text-xs font-bold border border-gray-200">Đã nghỉ việc</span>}</td>
                   <td className="p-4">{emp.hasFaceData ? <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-md text-xs font-bold border border-emerald-100 flex items-center gap-1.5 w-max"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg> Đã cập nhật</span> : <span className="px-3 py-1 bg-orange-50 text-orange-600 rounded-md text-xs font-bold border border-orange-100 flex items-center gap-1.5 w-max"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Chưa cập nhật</span>}</td>
-                  <td className="p-4 text-center"><div className="flex flex-col gap-2"><button disabled={emp.workStatus!=='Đang làm việc'} onClick={()=>{setNotice('');setFaceEmployee(emp);}} className="text-sm font-bold text-blue-600 disabled:text-gray-400 disabled:cursor-not-allowed">{emp.hasFaceData?'Cập nhật khuôn mặt':'Đăng ký khuôn mặt'}</button><button onClick={()=>editEmployee(emp)} className="text-blue-600 text-sm font-bold">Đổi tên</button><button onClick={()=>toggleEmployee(emp)} className="text-sm underline">{emp.workStatus==='Đang làm việc'?'Ngừng hoạt động':'Kích hoạt lại'}</button></div></td>
+                  <td className="p-4 text-center"><div className="flex flex-col gap-2"><button disabled={emp.workStatus!=='Đang làm việc'} onClick={()=>{setNotice('');setFaceEmployee(emp);}} className="text-sm font-bold text-blue-600 disabled:text-gray-400 disabled:cursor-not-allowed">{emp.hasFaceData?'Cập nhật khuôn mặt':'Đăng ký khuôn mặt'}</button><button disabled={employeeStatusBusy!==null} onClick={()=>{setNotice('');setEditingEmployee(emp);}} className="text-blue-600 text-sm font-bold disabled:opacity-50">Chỉnh sửa hồ sơ</button><button disabled={employeeStatusBusy!==null} onClick={()=>toggleEmployee(emp)} className="text-sm underline disabled:opacity-50">{emp.workStatus==='Đang làm việc'?'Ngừng hoạt động':'Kích hoạt lại'}</button></div></td>
                 </tr>
               ))
             )}
@@ -544,6 +547,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
       
       {showPasswordDialog && <PasswordDialog onClose={()=>setShowPasswordDialog(false)}/>}
       {faceEmployee && <FaceEnrollmentDialog employee={faceEmployee} onClose={()=>setFaceEmployee(null)} onSaved={employee=>{setFaceEmployee(null);setNotice(`Đã lưu khuôn mặt cho ${employee.name}.`);setReload(x=>x+1);}}/>}
+      {editingEmployee && <EmployeeEditDialog key={editingEmployee.id} employee={editingEmployee} employees={employees} onClose={()=>setEditingEmployee(null)} onSaved={saved=>{setEditingEmployee(null);setNotice(`Đã cập nhật hồ sơ ${saved.empId}. Email khôi phục mật khẩu: ${saved.email}.`);setReload(x=>x+1);}}/>}
       {/* Modal Thêm Nhân viên */}
       {showAddEmpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">

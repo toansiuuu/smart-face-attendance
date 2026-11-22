@@ -306,6 +306,32 @@ class PasswordRecoveryIntegrationTest {
     reset(result.path("requestId").asText(), code, 400);
   }
 
+  @Test void managerRestoresLostContactsAndRecoveryUsesNewEmailOnSameAccount() throws Exception {
+    var oldRequest = request("RECOVERY", "EMAIL");
+    String oldCode = code("EMAIL", "worker@example.test");
+    Long originalAccountId = accounts.findByEmployeeId(employeeId).orElseThrow().id;
+    employeeService.update(employeeId, new EmployeeUpdate("Recovery User", "INACTIVE", null, null, null, null, null));
+    var admin = new Account(); admin.username = "profile-admin"; admin.passwordHash = encoder.encode(ORIGINAL);
+    admin.enabled = true; admin.role = "MANAGER"; admin.createdAt = LocalDateTime.now(); accounts.save(admin);
+    var managerSession = (MockHttpSession) mvc.perform(post("/api/auth/login").with(csrf()).contentType("application/json")
+        .content(mapper.writeValueAsString(Map.of("username", "profile-admin", "password", ORIGINAL))))
+        .andExpect(status().isOk()).andReturn().getRequest().getSession(false);
+    mvc.perform(patch("/api/employees/" + employeeId).session(managerSession).with(csrf()).contentType("application/json")
+        .content(mapper.writeValueAsString(new EmployeeUpdate("Recovery User", "ACTIVE", "0987654321", "replacement@example.test", null, null, null))))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.empId").value("RECOVERY"));
+    reset(oldRequest.path("requestId").asText(), oldCode, 400);
+    clearInvocations(delivery);
+    time.set(time.get().plusSeconds(61));
+    var newRequest = request("RECOVERY", "EMAIL");
+    String newCode = code("EMAIL", "replacement@example.test");
+    verify(delivery, never()).send(eq("EMAIL"), eq("worker@example.test"), anyString());
+    reset(newRequest.path("requestId").asText(), newCode, 200);
+    login(NEW);
+    assertEquals(originalAccountId, accounts.findByEmployeeId(employeeId).orElseThrow().id);
+    assertEquals(2, accounts.count());
+    assertEquals(1, employees.count());
+  }
+
   @Test void inactiveEmployeesReceiveNoCode() throws Exception {
     var employee = employees.findById(employeeId).orElseThrow();
     employee.status = "INACTIVE"; employees.save(employee);

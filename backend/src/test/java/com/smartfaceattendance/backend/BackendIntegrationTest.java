@@ -38,6 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class BackendIntegrationTest {
   @Autowired MockMvc mvc;
+  @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
   @Autowired AccountRepository accounts;
   @Autowired EmployeeRepository employees;
@@ -116,6 +117,71 @@ class BackendIntegrationTest {
   @Test
   void unauthenticatedAccessRejected() throws Exception {
     mvc.perform(get("/api/employees")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void managerCanEditAndReactivateSameProfileWithoutLosingFaceOrAttendance() throws Exception {
+    schedule();
+    Long id = reportingEmployee("RESTOREPROFILE");
+    var date = today.minusDays(1);
+    var event = attendance.record(id, date.atTime(8, 0), null);
+    var employee = employees.findById(id).orElseThrow();
+    var originalCreatedAt = employee.createdAt;
+    var account = accounts.findByEmployeeId(id).orElseThrow();
+    String originalHash = account.passwordHash;
+    Long accountId = account.id;
+    var face = new FaceEnrollment();
+    face.employeeId = id; face.externalRef = "employee-" + id; face.modelVersion = "test-sface";
+    face.active = true; face.enrolledAt = date.atTime(7, 0);
+    jdbc.update("INSERT INTO face_enrollments (employee_id, external_ref, model_version, active, enrolled_at) VALUES (?, ?, ?, ?, ?)",
+        face.employeeId, face.externalRef, face.modelVersion, face.active, face.enrolledAt);
+    employeeService.update(id, new EmployeeUpdate("Test Employee", "INACTIVE", null, null, null, null, null));
+    mvc.perform(post("/api/auth/login").with(csrf()).contentType("application/json")
+        .content("{\"username\":\"RESTOREPROFILE\",\"password\":\"ValidPassword123\"}"))
+        .andExpect(status().isUnauthorized());
+    var update = new EmployeeUpdate("Nguyễn Văn An", "ACTIVE", "0987654321", "new-contact@example.test",
+        "Kỹ sư", LocalDate.of(2000, 1, 2), "MALE");
+    mvc.perform(patch("/api/employees/" + id).session(login("admin")).with(csrf()).contentType("application/json")
+        .content(mapper.writeValueAsString(update))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(id)).andExpect(jsonPath("$.empId").value("RESTOREPROFILE"))
+        .andExpect(jsonPath("$.email").value("new-contact@example.test"))
+        .andExpect(jsonPath("$.phone").value("0987654321"))
+        .andExpect(jsonPath("$.hasFaceData").value(true))
+        .andExpect(jsonPath("$.workStatus").value("Đang làm việc"));
+    var saved = employees.findById(id).orElseThrow();
+    assertEquals(originalCreatedAt, saved.createdAt);
+    assertEquals(LocalDate.of(2000, 1, 2), saved.dateOfBirth);
+    assertEquals("Kỹ sư", saved.position);
+    var restored = accounts.findByEmployeeId(id).orElseThrow();
+    assertEquals(accountId, restored.id); assertEquals(originalHash, restored.passwordHash);
+    assertEquals("RESTOREPROFILE", restored.username); assertTrue(restored.enabled);
+    assertTrue(attendanceEvents.existsById(event.id));
+    assertEquals("08:00", attendance.day(saved, date).milestones().get("MORNING_IN"));
+    mvc.perform(get("/api/auth/me").session(login("RESTOREPROFILE"))).andExpect(status().isOk());
+  }
+
+  @Test
+  void profileEditingIsManagerOnlyAndValidatesFullForm() throws Exception {
+    Long id = employee("EDITAUTH");
+    var body = new EmployeeUpdate("Valid Name", "ACTIVE", "0912345678", "valid@example.test", null, null, null);
+    String url = "/api/employees/" + id;
+    mvc.perform(patch(url).with(csrf()).contentType("application/json").content(mapper.writeValueAsString(body)))
+        .andExpect(status().isUnauthorized());
+    mvc.perform(patch(url).session(login("EDITAUTH")).with(csrf()).contentType("application/json").content(mapper.writeValueAsString(body)))
+        .andExpect(status().isForbidden());
+    var managerSession = login("admin");
+    for (var invalid : List.of(
+        new EmployeeUpdate("123", "ACTIVE", null, "valid@example.test", null, null, null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", "abc", "valid@example.test", null, null, null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", null, "", null, null, null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", null, "invalid", null, null, null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", null, "valid@example.test", " ", null, null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", null, "valid@example.test", null, today.plusDays(1), null),
+        new EmployeeUpdate("Valid Name", "ACTIVE", null, "valid@example.test", null, null, "UNKNOWN")))
+      mvc.perform(patch(url).session(managerSession).with(csrf()).contentType("application/json").content(mapper.writeValueAsString(invalid)))
+          .andExpect(status().isBadRequest());
+    assertEquals("Test Employee", employees.findById(id).orElseThrow().fullName);
+    assertEquals("EDITAUTH@example.test".toLowerCase(Locale.ROOT), employees.findById(id).orElseThrow().email);
   }
 
   private AttendanceService reportingClock(LocalDateTime instant) {

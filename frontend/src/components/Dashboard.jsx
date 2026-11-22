@@ -46,7 +46,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
 
   const [reqSubTab, setReqSubTabState] = useState('PENDING'); 
 
-  const setActiveTab = value => {setActiveTabState(value);setCurrentPage(1);};
+  const setActiveTab = value => {setActiveTabState(value);setCurrentPage(1);setNotice('');};
   const setEmpSearchTerm = value => {setEmpSearchTermState(value);setCurrentPage(1);};
   const setAttSearchTerm = value => {setAttSearchTermState(value);setCurrentPage(1);};
   const setAttStatusFilter = value => {setAttStatusFilterState(value);setCurrentPage(1);};
@@ -129,7 +129,7 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
     }
   };
   const empPatchBody=(emp,overrides={})=>({fullName:emp.name,status:emp.workStatus==='Đang làm việc'?'ACTIVE':'INACTIVE',phone:emp.phone||null,email:emp.email||null,position:emp.position||null,dateOfBirth:emp.dateOfBirth||null,gender:emp.gender||null,...overrides});
-  const toggleEmployee=async(emp)=>{if(employeeStatusBusy!==null)return;setEmployeeStatusBusy(emp.id);try{setApiError('');await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setNotice(`${emp.workStatus==='Đang làm việc'?'Đã ngừng hoạt động':'Đã kích hoạt lại'} tài khoản ${emp.empId}.`);setReload(x=>x+1);}catch(e){setApiError(e.message);}finally{setEmployeeStatusBusy(null);}};
+  const toggleEmployee=async(emp)=>{if(employeeStatusBusy!==null)return;setEmployeeStatusBusy(emp.id);setNotice('');try{setApiError('');await api(`/employees/${emp.id}`,{method:'PATCH',body:empPatchBody(emp,{status:emp.workStatus==='Đang làm việc'?'INACTIVE':'ACTIVE'})});setNotice(`${emp.workStatus==='Đang làm việc'?'Đã ngừng hoạt động':'Đã kích hoạt lại'} tài khoản ${emp.empId}.`);setReload(x=>x+1);}catch(e){setApiError(e.message);}finally{setEmployeeStatusBusy(null);}};
 
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -537,9 +537,11 @@ const Dashboard = ({initialTab = 'TONG_QUAN'}) => {
           {activeTab !== 'BAO_CAO' && !policy?.policyConfigured&&<p className="bg-amber-50 p-3 mb-3">Chưa chọn ngày làm việc cho lịch hiện tại. <button type="button" className="font-semibold text-blue-700 underline" onClick={()=>setActiveTab('CAU_HINH_LICH')}>Mở cấu hình lịch</button> để bật tính ngày vắng.</p>}
           {activeTab === 'BAO_CAO' && <ReportsPanel employees={employees} reload={reload}/>}
           {activeTab === 'CAU_HINH_LICH' && <SchedulePanel onSaved={()=>setReload(value=>value+1)}/>}
-          {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
           {activeTab === 'TONG_QUAN' && <div className="animate-fade-in">{renderDashboardOverview()}</div>}
-          {activeTab === 'NHAN_VIEN' && <div className="animate-fade-in">{renderEmployeesTable()}</div>}
+          {activeTab === 'NHAN_VIEN' && <div className="animate-fade-in">
+            {notice && <p role="status" className="mb-3 rounded-xl bg-green-50 p-3 text-green-700">{notice}</p>}
+            {renderEmployeesTable()}
+          </div>}
           {activeTab === 'BANG_CONG' && <div className="animate-fade-in">{renderAttendanceTableFull()}</div>}
           {activeTab === 'YEU_CAU' && <div className="animate-fade-in">{renderRequestsCardsView()}</div>}
         </div>
